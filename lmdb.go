@@ -283,12 +283,20 @@ func (txn *Txn) OpenTable(name string) TableID {
 	return (TableID)(dbi)
 }
 
+// 1) Panic if {id} does not exist (TODO: test the behaviour when id does not exist)
+func (txn *Txn) ClearTable(id TableID) {
+	err := txn.txn.Drop((mdb.DBI)(id), 0) // TODO: ignore the errors?
+	if err != nil {                       // Possible errors: EINVAL, EACCES, MDB_BAD_DBI
+		panic(err)
+	}
+}
+
 // 1) Silent if {id} does not exist (TODO: test the behaviour when id does not exist)
 // 2) if {del} is true, the table will be removed (warning: the table id may be unusable in the
 //    following txns); if {del} is false, table is only cleared, {id} is still valid.
-func (txn *Txn) DropTable(id TableID, del bool) {
-	err := txn.txn.Drop((mdb.DBI)(id), bool2i(del)) // TODO: ignore the errors?
-	if err != nil {                                 // Possible errors: EINVAL, EACCES, MDB_BAD_DBI
+func (txn *Txn) DropTable(id TableID) {
+	err := txn.txn.Drop((mdb.DBI)(id), 1) // TODO: ignore the errors?
+	if err != nil {                       // Possible errors: EINVAL, EACCES, MDB_BAD_DBI
 		panic(err)
 	}
 }
