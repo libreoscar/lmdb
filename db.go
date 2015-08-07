@@ -2,6 +2,7 @@ package lmdb
 
 import (
 	"github.com/szferi/gomdb"
+	_ "log"
 )
 
 // Thread Safety
@@ -33,17 +34,29 @@ const (
 	MAP_SIZE_DEFAULT uint64 = 1024 * 1024 * 1024 * 1024 // 1TB
 )
 
-type DB struct {
-	env *mdb.Env
-}
+type DB mdb.Env
 
-type Stat struct {
-	mdb.Stat
-}
+/*
+ * A database handle (DBI) denotes the name and parameters of a database, independently of whether
+ * such a database exists.
+ * The database handle may be discarded by calling #mdb_dbi_close().
+ * The old database handle is returned if the database was already open.
+ * The handle may only be closed once.
+ * The database handle will be private to the current txn until the txn is successfully committed.
+ * If the txn is aborted the handle will be closed automatically. After a successful commit the
+ * handle will reside in the shared environment, and may be used by other txns. This function must
+ * not be called from multiple concurrent txns. A txn that uses this function must finish (either
+ * commit or abort) before any other txn may use this function.
+ *
+ * ref: mdb_dbi_open's doc
+ *
+ * BTW: In this package, a BucketID(DBI) is never closed (as there's no mdb_dbi_close like
+ * api is provided) until DB.Close(), in which all dbis are closed automatically.
+ */
+type BucketID mdb.DBI
 
-type Info struct {
-	mdb.Info
-}
+type Stat mdb.Stat
+type Info mdb.Info
 
 //--------------------------------- DB ------------------------------------------------------------
 
@@ -55,66 +68,58 @@ func Open(path string) (*DB, error) {
 	return Open2(path, MAX_BUCKET_SIZE_DEFAULT, MAP_SIZE_DEFAULT)
 }
 
-func Open2(path string, maxBuckets uint, maxMapSize uint64) (*DB, error) {
+func Open2(path string, maxBuckets uint, maxMapSize uint64) (db *DB, err error) {
 	env, err := mdb.NewEnv()
-	if err != nil { // Possible errors: ENOMEM (out of memory)
-		panic(err)
+	if err != nil {
+		return
 	}
 
 	err = env.SetMapSize(maxMapSize)
-	if err != nil { // Possible errors: EINVAL, other system criticle errors
-		panic(err)
+	if err != nil {
+		return
 	}
 
 	// http://www.openldap.org/lists/openldap-technical/201305/msg00176.html
 	err = env.SetMaxDBs((mdb.DBI)(maxBuckets))
-	if err != nil { // Possible errors: EINVAL
-		panic(err)
+	if err != nil {
+		return
 	}
 
 	err = env.Open(path, 0, 0664) // NOTLS is enforced in env.Open
-	if err != nil && errorToNum(err) > 0 {
-		panic(err)
+	if err == nil {
+		db = (*DB)(env)
 	}
 
-	if err != nil {
-		return nil, err
-	} else {
-		return &DB{env}, nil
-	}
+	return
 }
 
 func (db *DB) Close() {
-	err := db.env.Close() // all opened dbis are closed during this process
-	if err != nil {       // Possible errors: "Env already closed"
-		panic(err)
-	}
-	db.env = nil
+	(*mdb.Env)(db).Close() // all opened dbis are closed during this process
 }
 
 func (db *DB) Stat() *Stat {
-	stat, err := db.env.Stat()
+	stat, err := (*mdb.Env)(db).Stat()
 	if err != nil { // Possible errors: EINVAL
 		panic(err)
 	}
-	return &Stat{*stat}
+	return (*Stat)(stat)
 }
 
 func (db *DB) Info() *Info {
-	info, err := db.env.Info()
+	info, err := (*mdb.Env)(db).Info()
 	if err != nil { // error when env == nil, so panic
 		panic(err)
 	}
-	return &Info{*info}
+	return (*Info)(info)
 }
 
 // start a Read-Write txn. The txn will be committed or aborted based on the returning value of {f}
 func (db *DB) Update(parent *Txn, f func(*Txn) error) (err error) {
-	txnOrig, err := db.env.BeginTxn(parent.txn, 0)
+	txnOrig, err := (*mdb.Env)(db).BeginTxn((*mdb.Txn)(parent), 0)
 	if err != nil { // Possible Errors: MDB_PANIC, MDB_MAP_RESIZED, MDB_READERS_FULL, ENOMEM
 		panic(err)
 	}
-	txn := &Txn{txnOrig}
+	txn := (*Txn)(txnOrig)
 
 	var panicF interface{} // panic from f
 
@@ -141,11 +146,11 @@ func (db *DB) Update(parent *Txn, f func(*Txn) error) (err error) {
 }
 
 func (db *DB) View(parent *Txn, f func(*Txn)) {
-	txnOrig, err := db.env.BeginTxn(parent.txn, mdb.RDONLY)
+	txnOrig, err := (*mdb.Env)(db).BeginTxn((*mdb.Txn)(parent), mdb.RDONLY)
 	if err != nil { // Possible Errors: MDB_PANIC, MDB_MAP_RESIZED, MDB_READERS_FULL, ENOMEM
 		panic(err)
 	}
-	txn := &Txn{txnOrig}
+	txn := (*Txn)(txnOrig)
 
 	var panicF interface{} // panic from f
 
