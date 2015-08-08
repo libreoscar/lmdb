@@ -21,8 +21,9 @@ import (
 //
 // Best practice:
 // 1) Use iterators only in the txn that they are created; close them before txn ends.
-// 2) DO NOT modify the memory slice from tx.Get and iterators.
-// 3) Close all read/write txns before DB.Close()
+// 2) DO NOT modify the memory slice from tx.Get and Iterator.Get.
+// 3) Close all read/write txns before DB.Close().
+// 4) DO NOT use outer txn when inside a nested txn.
 
 const (
 	// On 64-bit there is no penalty for making this huge
