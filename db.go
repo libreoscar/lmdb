@@ -2,7 +2,6 @@ package lmdb
 
 import (
 	"github.com/szferi/gomdb"
-	_ "log"
 )
 
 // Thread Safety
@@ -21,15 +20,11 @@ import (
 //-------------------------------------------------------------------------------------------------
 //
 // Best practice:
-// 1) Create/Drop buckets in the beginning of the program, before any other txns; do not drop or
-//    open buckets when the program runs in parallel afterwards.
-// 2) Use iterators only in the txn that they are created; close them before txn ends.
+// 1) Use iterators only in the txn that they are created; close them before txn ends.
+// 2) DO NOT modify the memory slice from tx.Get and iterators.
 // 3) Close all read/write txns before DB.Close()
 
 const (
-	// Named databases + main and free DB are 30 + 2 == 32
-	MAX_BUCKET_SIZE_DEFAULT uint = 30
-
 	// On 64-bit there is no penalty for making this huge
 	MAP_SIZE_DEFAULT uint64 = 1024 * 1024 * 1024 * 1024 // 1TB
 )
@@ -50,8 +45,8 @@ type DB mdb.Env
  *
  * ref: mdb_dbi_open's doc
  *
- * BTW: In this package, a BucketID(DBI) is never closed (as there's no mdb_dbi_close like
- * api is provided) until DB.Close(), in which all dbis are closed automatically.
+ * BTW: In this package, a BucketID(DBI) can be obtained only through Open/Open2, and is never
+ * closed until DB.Close(), in which all dbis are closed automatically.
  */
 type BucketID mdb.DBI
 
@@ -64,11 +59,11 @@ func Version() string {
 	return mdb.Version()
 }
 
-func Open(path string) (*DB, error) {
-	return Open2(path, MAX_BUCKET_SIZE_DEFAULT, MAP_SIZE_DEFAULT)
+func Open(path string, buckets []string) (*DB, []BucketID, error) {
+	return Open2(path, buckets, MAP_SIZE_DEFAULT)
 }
 
-func Open2(path string, maxBuckets uint, maxMapSize uint64) (db *DB, err error) {
+func Open2(path string, buckets []string, maxMapSize uint64) (db *DB, ids []BucketID, err error) {
 	env, err := mdb.NewEnv()
 	if err != nil {
 		return
@@ -80,15 +75,31 @@ func Open2(path string, maxBuckets uint, maxMapSize uint64) (db *DB, err error) 
 	}
 
 	// http://www.openldap.org/lists/openldap-technical/201305/msg00176.html
-	err = env.SetMaxDBs((mdb.DBI)(maxBuckets))
+	err = env.SetMaxDBs((mdb.DBI)(len(buckets)))
 	if err != nil {
 		return
 	}
 
-	err = env.Open(path, 0, 0664) // NOTLS is enforced in env.Open
-	if err == nil {
+	MDB_NOTLS := uint(0x200000)
+	MDB_NORDAHEAD := uint(0x800000)
+	err = env.Open(path, MDB_NOTLS|MDB_NORDAHEAD, 0664)
+	if err != nil {
+		return
+	} else {
 		db = (*DB)(env)
 	}
+
+	err = db.Update(nil, func(txn *Txn) error {
+		for _, name := range buckets {
+			id, err := txn.openBucket(name)
+			if err != nil {
+				return err
+			} else {
+				ids = append(ids, id)
+			}
+		}
+		return nil
+	})
 
 	return
 }

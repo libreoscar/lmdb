@@ -1,6 +1,7 @@
 package lmdb
 
 import (
+	"errors"
 	"github.com/szferi/gomdb"
 )
 
@@ -25,36 +26,24 @@ func (txn *Txn) abort() {
 	(*mdb.Txn)(txn).Abort()
 }
 
+// Used internally
 // Create a bucket if it does not exist
 // There's no BucketID.Close() by purpose; all buckets are closed automatically in DB.Close()
-// DO NOT CALL THIS CONCURRENTLY!!!
-func (txn *Txn) OpenBucket(name string) BucketID {
+func (txn *Txn) openBucket(name string) (id BucketID, err error) {
 	if name == "" {
-		panic("Bucket name can not be empty")
+		err = errors.New("Bucket name is empty")
+		return
 	}
-
-	dbi, err := (*mdb.Txn)(txn).DBIOpen(&name, mdb.CREATE)
-	if err != nil { // Possible errors: MDB_DBS_FULL
-		// because MDB_DBS_FULL is controllable by the programmer, it deserves a panic
-		panic(err)
+	if dbi, err := (*mdb.Txn)(txn).DBIOpen(&name, mdb.CREATE); err == nil {
+		id = (BucketID)(dbi)
 	}
-	return (BucketID)(dbi)
+	return
 }
 
 // 1) Panic if {id} does not exist (TODO: test the behaviour when id does not exist)
 func (txn *Txn) ClearBucket(id BucketID) {
-	err := (*mdb.Txn)(txn).Drop((mdb.DBI)(id), 0) // TODO: ignore the errors?
-	if err != nil {                               // Possible errors: EINVAL, EACCES, MDB_BAD_DBI
-		panic(err)
-	}
-}
-
-// 1) Silent if {id} does not exist (TODO: test the behaviour when id does not exist)
-// 2) if {del} is true, the bucket will be removed (warning: the bucket id may be unusable in the
-//    following txns); if {del} is false, bucket is only cleared, {id} is still valid.
-func (txn *Txn) DropBucket(id BucketID) {
-	err := (*mdb.Txn)(txn).Drop((mdb.DBI)(id), 1) // TODO: ignore the errors?
-	if err != nil {                               // Possible errors: EINVAL, EACCES, MDB_BAD_DBI
+	err := (*mdb.Txn)(txn).Drop((mdb.DBI)(id), 0)
+	if err != nil { // Possible errors: EINVAL, EACCES, MDB_BAD_DBI
 		panic(err)
 	}
 }
@@ -86,27 +75,26 @@ func (txn *Txn) Get(id BucketID, key []byte) ([]byte, bool) {
 func (txn *Txn) Put(id BucketID, key, val []byte) {
 	err := (*mdb.Txn)(txn).Put((mdb.DBI)(id), key, val, 0)
 	if err != nil { // Possible errors: MDB_MAP_FULL, MDB_TXN_FULL, EACCES, EINVAL
-		panic(err) // TODO: test the condition of MDB_TXN_FULL (seemes 2^17, make sure tx is safe)
+		panic(err)
 	}
 }
 
 // 1) Silent if {key} does not exist
-// TODO: test with non-existence keys (error is MDB_NOTFOUND?)
 func (txn *Txn) Delete(id BucketID, key []byte) {
 	err := (*mdb.Txn)(txn).Del((mdb.DBI)(id), key, nil)
-	if err != nil { // Possible errors: EINVAL, EACCES, MDB_BAD_TXN
+	if err != nil && err != mdb.NotFound { // Possible errors: EINVAL, EACCES, MDB_BAD_TXN
 		panic(err)
 	}
 }
 
 // TODO: test behaviour
-// 1) when db is empty (in this case, there should not be a panic)
+// 1) when bucket is empty (in this case, there should not be a panic)
 // 2) test cur location
-func (txn *Txn) Begin(id BucketID) (*Iterator, error) {
+func (txn *Txn) BucketBegin(id BucketID) *Iterator {
 	cur, err := (*mdb.Txn)(txn).CursorOpen((mdb.DBI)(id))
 	if err != nil {
 		panic(err)
 	} else {
-		return (*Iterator)(cur), nil // TODO
+		return (*Iterator)(cur)
 	}
 }

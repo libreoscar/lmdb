@@ -1,11 +1,68 @@
 package main
 
 import (
+	// "errors"
 	"github.com/libreoscar/lmdb"
 	"io/ioutil"
 	"log"
 	"os"
+	// "time"
 )
+
+// TODO: test nested tx
+// TODO: multi threaded
+
+func showBucket(db *lmdb.DB, bucket lmdb.BucketID) {
+	db.View(nil, func(txn *lmdb.Txn) {
+		// itr := txn.BucketBegin(bucket)
+		// defer itr.Close()
+
+		// for key, value, more := itr.Next(); more; {
+		// 	log.Println(key, value)
+		// }
+		val, b := txn.Get(bucket, []byte("foo0"))
+		if b {
+			log.Println("foo0", string(val))
+		} else {
+			log.Println("foo0: None")
+		}
+
+		val, b = txn.Get(bucket, []byte("foo1"))
+		if b {
+			log.Println("foo1", string(val))
+		} else {
+			log.Println("foo1: None")
+		}
+
+		val, b = txn.Get(bucket, []byte("foo2"))
+		if b {
+			log.Println("foo2", string(val))
+		} else {
+			log.Println("foo2: None")
+		}
+
+		val, b = txn.Get(bucket, []byte("foo3"))
+		if b {
+			log.Println("foo3", string(val))
+		} else {
+			log.Println("foo3: None")
+		}
+
+		val, b = txn.Get(bucket, []byte("foo4"))
+		if b {
+			log.Println("foo4", string(val))
+		} else {
+			log.Println("foo4: None")
+		}
+
+		val, b = txn.Get(bucket, []byte("foo5"))
+		if b {
+			log.Println("foo5", string(val))
+		} else {
+			log.Println("foo5: None")
+		}
+	})
+}
 
 func main() {
 	log.Println(lmdb.Version())
@@ -14,51 +71,38 @@ func main() {
 	log.Println(path)
 	defer os.RemoveAll(path)
 
-	db, err := lmdb.Open2(path, 0, 0) // TODO: change parameter
-	defer db.Close()
+	//------------------------- opening db --------------------------------------
+
+	bucketNames := []string{"b1", "b2"}
+	db, buckets, err := lmdb.Open(path, bucketNames) // TODO: change parameter
+	defer func() {
+		if db != nil {
+			db.Close()
+		}
+	}()
 	if err != nil {
-		log.Fatalln(err)
+		panic(err)
 	}
 
-	// env := CreateEnv(path, 1<<20)
-	// defer env.Close() // cleaning up
+	// log.Println(buckets)
+	// log.Printf("%+v", db.Stat())
+	// log.Printf("%+v", db.Info())
 
-	// txn, _ := env.BeginTxn(nil, 0) // parent, flags
+	//----------------------- make update ---------------------------------------
+	bucket0, bucket1 := buckets[0], buckets[1]
+	db.Update(nil, func(txn *lmdb.Txn) error {
+		txn.Put(bucket0, []byte("foo0"), []byte("bar0"))
+		txn.Put(bucket0, []byte("foo1"), []byte("bar1"))
+		txn.Put(bucket0, []byte("foo2"), []byte("bar2"))
 
-	// dbi, _ := txn.DBIOpen(nil, 0) // name, flag(CREATE), mdb_env_set_maxdbs for named db
-	// defer env.DBIClose(dbi)
+		txn.Put(bucket1, []byte("foo3"), []byte("bar3"))
+		txn.Put(bucket1, []byte("foo4"), []byte("bar4"))
+		// log.Printf("%+v", txn.Stat(bucket0))
+		// log.Printf("%+v", txn.Stat(bucket1))
 
-	// txn.Commit()
+		return nil
+	})
 
-	// // write some data
-	// txn, _ = env.BeginTxn(nil, 0)
-	// for i := 0; i < 5; i++ {
-	// 	key := fmt.Sprintf("Key-%d", i)
-	// 	val := fmt.Sprintf("Val-%d", i)
-	// 	txn.Put(dbi, []byte(key), []byte(val), 0)
-	// }
-	// txn.Commit()
-
-	// // inspect the database
-	// fmt.Println(env.Stat())
-
-	// // scan the database
-	// txn, _ = env.BeginTxn(nil, mdb.RDONLY)
-	// defer txn.Abort()
-	// cursor, _ := txn.CursorOpen(dbi)
-	// defer cursor.Close()
-	// for {
-	// 	bkey, bval, err := cursor.Get(nil, nil, mdb.NEXT)
-	// 	if err == mdb.NotFound {
-	// 		break
-	// 	}
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// 	fmt.Printf("%s: %s\n", bkey, bval)
-	// }
-
-	// // random access
-	// bval, _ := txn.Get(dbi, []byte("Key-3"))
-	// fmt.Println(string(bval))
+	// showBucket(db, bucket0)
+	// showBucket(db, bucket1)
 }
