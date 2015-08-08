@@ -9,7 +9,7 @@ import (
 // before txn ends.
 //
 // Attention:
-// The bytes returned from the following functions are read-only, DO NOT write to them.
+// The bytes returned from Get() are memory-mapped database contents, DO NOT modify them.
 type Iterator mdb.Cursor
 
 func (itr *Iterator) Close() {
@@ -35,6 +35,7 @@ func (itr *Iterator) SeekLast() bool {
 	return err == nil
 }
 
+// If current position is the first element, Prev() returns false, and stays its current position.
 func (itr *Iterator) Prev() bool {
 	_, _, err := (*mdb.Cursor)(itr).GetVal(nil, nil, mdb.PREV)
 	if err != nil && err != mdb.NotFound {
@@ -43,8 +44,7 @@ func (itr *Iterator) Prev() bool {
 	return err == nil
 }
 
-// If {itr}'s current position is the last element, Next() returns (nil, nil, false), and {itr}
-// stays its current position
+// If current position is the last element, Next() returns false, and stays its current position.
 func (itr *Iterator) Next() bool {
 	_, _, err := (*mdb.Cursor)(itr).GetVal(nil, nil, mdb.NEXT)
 	if err != nil && err != mdb.NotFound {
@@ -61,7 +61,8 @@ func (itr *Iterator) Seek(k []byte) bool {
 	return err == nil
 }
 
-func (itr *Iterator) Get() ([]byte, []byte) { // GET_CURRENT
+// Returns (key, value) pair. DO NOT modify them in-place, make a copy instead.
+func (itr *Iterator) Get() ([]byte, []byte) {
 	key, val, err := (*mdb.Cursor)(itr).GetVal(nil, nil, mdb.GET_CURRENT)
 	if err != nil {
 		panic(err)

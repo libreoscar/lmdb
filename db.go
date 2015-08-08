@@ -26,8 +26,9 @@ import (
 // 4) DO NOT use outer txn when inside a nested txn.
 
 const (
-	// On 64-bit there is no penalty for making this huge
-	MAP_SIZE_DEFAULT uint64 = 1024 * 1024 * 1024 * 1024 // 1TB
+	// There is no penalty for making this huge.
+	// If you are on a 32-bit system, use Open2 and specify a smaller map size.
+	MAP_SIZE_DEFAULT uint64 = 256 * 1024 * 1024 * 1024 * 1024 // 256TB
 )
 
 type DB mdb.Env
@@ -125,7 +126,7 @@ func (db *DB) Info() *Info {
 	return (*Info)(info)
 }
 
-// start a Read-Write txn. The txn will be committed or aborted based on the returning value of {f}
+// start a write txn. The txn will be committed or aborted based on the returning value of {f}
 func (db *DB) Update(parent *Txn, f func(*Txn) error) (err error) {
 	txnOrig, err := (*mdb.Env)(db).BeginTxn((*mdb.Txn)(parent), 0)
 	if err != nil { // Possible Errors: MDB_PANIC, MDB_MAP_RESIZED, MDB_READERS_FULL, ENOMEM

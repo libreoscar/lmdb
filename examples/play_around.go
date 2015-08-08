@@ -6,7 +6,7 @@ import (
 	"github.com/libreoscar/lmdb"
 	"io/ioutil"
 	"log"
-	// "os"
+	"os"
 )
 
 func showBucket(db *lmdb.DB, bucket lmdb.BucketID) {
