@@ -21,14 +21,14 @@ import (
 //
 // Best practice:
 // 1) Use iterators only in the txn that they are created; close them before txn ends.
-// 2) DO NOT modify the memory slice from tx.Get and Iterator.Get.
+// 2) DO NOT modify the memory slice from tx.GetNoCopy and Iterator.GetNoCopy.
 // 3) Close all read/write txns before DB.Close().
 // 4) DO NOT use outer txn when inside a nested txn.
 
 const (
 	// There is no penalty for making this huge.
 	// If you are on a 32-bit system, use Open2 and specify a smaller map size.
-	MAP_SIZE_DEFAULT uint64 = 256 * 1024 * 1024 * 1024 * 1024 // 256TB
+	MAP_SIZE_DEFAULT uint64 = 64 * 1024 * 1024 * 1024 * 1024 // 64TB
 )
 
 type DB mdb.Env

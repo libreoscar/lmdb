@@ -9,7 +9,7 @@ import (
 // before txn ends.
 //
 // Attention:
-// The bytes returned from Get() are memory-mapped database contents, DO NOT modify them.
+// The bytes returned from GetNoCopy() are memory-mapped database contents, DO NOT modify them.
 type Iterator mdb.Cursor
 
 func (itr *Iterator) Close() {
@@ -61,8 +61,17 @@ func (itr *Iterator) Seek(k []byte) bool {
 	return err == nil
 }
 
-// Returns (key, value) pair. DO NOT modify them in-place, make a copy instead.
+// Returns (key, value) pair.
 func (itr *Iterator) Get() ([]byte, []byte) {
+	key, val, err := (*mdb.Cursor)(itr).GetVal(nil, nil, mdb.GET_CURRENT)
+	if err != nil {
+		panic(err)
+	}
+	return key.Bytes(), val.Bytes()
+}
+
+// Returns (key, value) pair. DO NOT modify them in-place, make a copy instead.
+func (itr *Iterator) GetNoCopy() ([]byte, []byte) {
 	key, val, err := (*mdb.Cursor)(itr).GetVal(nil, nil, mdb.GET_CURRENT)
 	if err != nil {
 		panic(err)

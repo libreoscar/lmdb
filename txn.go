@@ -40,7 +40,7 @@ func (txn *Txn) openBucket(name string) (bucket BucketID, err error) {
 	return
 }
 
-// 1) Panic if {bucket} does not exist (TODO: test the behaviour when bucket does not exist)
+// 1) Panic if {bucket} does not exist
 func (txn *Txn) ClearBucket(bucket BucketID) {
 	err := (*mdb.Txn)(txn).Drop((mdb.DBI)(bucket), 0)
 	if err != nil { // Possible errors: EINVAL, EACCES, MDB_BAD_DBI
@@ -60,6 +60,20 @@ func (txn *Txn) Stat(bucket BucketID) *Stat {
 // 1) Panic if {bucket} is invalid
 // 2) Return {nil, false} if {key} does not exist, {val, true} if {key} exist
 func (txn *Txn) Get(bucket BucketID, key []byte) ([]byte, bool) {
+	v, err := (*mdb.Txn)(txn).GetVal((mdb.DBI)(bucket), key)
+	if err != nil {
+		if err == mdb.NotFound {
+			return nil, false
+		} else { // Possible errors: EINVAL, MDB_BAD_TXN, MDB_BAD_VALSIZE, etc
+			panic(err)
+		}
+	}
+	return v.Bytes(), true
+}
+
+// 1) Panic if {bucket} is invalid
+// 2) Return {nil, false} if {key} does not exist, {val, true} if {key} exist
+func (txn *Txn) GetNoCopy(bucket BucketID, key []byte) ([]byte, bool) {
 	v, err := (*mdb.Txn)(txn).GetVal((mdb.DBI)(bucket), key)
 	if err != nil {
 		if err == mdb.NotFound {
