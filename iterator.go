@@ -13,10 +13,7 @@ import (
 type Iterator mdb.Cursor
 
 func (itr *Iterator) Close() {
-	err := (*mdb.Cursor)(itr).Close() // Possible errors: Iterator already closed
-	if err != nil {
-		panic(err)
-	}
+	(*mdb.Cursor)(itr).Close() // Possible errors: Iterator already closed (ignored)
 }
 
 func (itr *Iterator) SeekFirst() bool {
