@@ -132,7 +132,11 @@ func (ctx *Context) Info() *Info {
 }
 
 func (ctx *Context) Transactional(write bool, f func(ctx *Context) error) (err error) {
-	txn, err := ctx.env.BeginTxn(ctx.txn, 0)
+	var flag uint = 0
+	if !write {
+		flag = mdb.RDONLY
+	}
+	txn, err := ctx.env.BeginTxn(ctx.txn, flag)
 	if err != nil { // Possible Errors: MDB_PANIC, MDB_MAP_RESIZED, MDB_READERS_FULL, ENOMEM
 		panic(err)
 	}
