@@ -12,7 +12,7 @@ import (
 // 2) Most objects can be safely called by a single caller from a single thread, and usually it
 //    only makes sense to have a single caller, except in the case of Context.
 // 3) Most Context methods are thread-safe, and may be called concurrently, except for
-//    Context.close().
+//    Context.Close().
 // 4) A write txn may only be used from the thread it was created on.
 // 5) A read-only txn can move across threads, but it cannot be used concurrently from multiple
 //    threads.
@@ -82,7 +82,7 @@ func Open2(path string, buckets []string, maxMapSize uint64) (ctx Context, err e
 	bucketCache := make(map[string]mdb.DBI)
 	ctx = Context{env, nil, nil, nil}
 
-	err = ctx.Transactional(true, func(ctx Context) error {
+	err = ctx.Transactional(true, func(ctx *Context) error {
 		for _, name := range buckets {
 			if name == "" {
 				return errors.New("Bucket name is empty")
@@ -107,10 +107,15 @@ func Open2(path string, buckets []string, maxMapSize uint64) (ctx Context, err e
 }
 
 func (ctx *Context) Close() {
-	ctx.env.Close() // all opened dbis are closed during this process
+	if ctx.txn != nil {
+		panic("Closing database inside a transaction")
+	}
+	if ctx.env != nil {
+		ctx.env.Close() // all opened dbis are closed during this process
+	}
 }
 
-func (ctx *Context) Stat() *Stat {
+func (ctx *Context) DBStat() *Stat {
 	stat, err := ctx.env.Stat()
 	if err != nil { // Possible errors: EINVAL
 		panic(err)
@@ -126,7 +131,7 @@ func (ctx *Context) Info() *Info {
 	return (*Info)(info)
 }
 
-func (ctx *Context) Transactional(write bool, f func(ctx Context) error) (err error) {
+func (ctx *Context) Transactional(write bool, f func(ctx *Context) error) (err error) {
 	txn, err := ctx.env.BeginTxn(ctx.txn, 0)
 	if err != nil { // Possible Errors: MDB_PANIC, MDB_MAP_RESIZED, MDB_READERS_FULL, ENOMEM
 		panic(err)
@@ -139,7 +144,8 @@ func (ctx *Context) Transactional(write bool, f func(ctx Context) error) (err er
 			itr.Close() // no panic
 		}
 		newCtx.itrs = nil
-		if err == nil && panicF == nil && !write {
+
+		if err == nil && panicF == nil && write {
 			e := txn.Commit()
 			if e != nil { // Possible errors: EINVAL, ENOSPEC, EIO, ENOMEM
 				panic(e)
@@ -156,7 +162,7 @@ func (ctx *Context) Transactional(write bool, f func(ctx Context) error) (err er
 		defer func() {
 			panicF = recover()
 		}()
-		err = f(newCtx)
+		err = f(&newCtx)
 		return
 	}()
 
