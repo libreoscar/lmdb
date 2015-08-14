@@ -190,7 +190,7 @@ func (ctx *Context) ClearBucket(bucket string) {
 	}
 }
 
-func (ctx *Context) TxStat(bucket string) *Stat {
+func (ctx *Context) BucketStat(bucket string) *Stat {
 	stat, err := ctx.txn.Stat(ctx.getBucketId(bucket))
 	if err != nil { // Possible errors: EINVAL, MDB_BAD_TXN
 		panic(err)
