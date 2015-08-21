@@ -12,7 +12,7 @@ const (
 )
 
 func SubTxns(ctx *Context, t *testing.T) {
-	if n := ctx.TxStat(BucketName).Entries; n != 0 {
+	if n := ctx.BucketStat(BucketName).Entries; n != 0 {
 		t.Fatal("bucket not empty: ", n)
 	}
 
@@ -22,7 +22,7 @@ func SubTxns(ctx *Context, t *testing.T) {
 		ctx.Put(BucketName, []byte("txn01"), []byte("bar01"))
 		return nil
 	})
-	if n := ctx.TxStat(BucketName).Entries; n != 2 {
+	if n := ctx.BucketStat(BucketName).Entries; n != 2 {
 		t.Fatalf("assertion failed. expect 2, got %d", n)
 	}
 
@@ -32,7 +32,7 @@ func SubTxns(ctx *Context, t *testing.T) {
 		ctx.Put(BucketName, []byte("txn11"), []byte("bar11"))
 		return errors.New("whatever error")
 	})
-	if n := ctx.TxStat(BucketName).Entries; n != 2 {
+	if n := ctx.BucketStat(BucketName).Entries; n != 2 {
 		t.Fatalf("assertion failed. expect 2, got %d", n)
 	}
 
@@ -43,7 +43,7 @@ func SubTxns(ctx *Context, t *testing.T) {
 		ctx.Put(BucketName, []byte("txn00"), []byte("bar99"))
 		return nil
 	})
-	if n := ctx.TxStat(BucketName).Entries; n != 4 {
+	if n := ctx.BucketStat(BucketName).Entries; n != 4 {
 		t.Fatalf("assertion failed. expect 4, got %d", n)
 	}
 }
@@ -67,7 +67,7 @@ func TestNestedTxn1(t *testing.T) {
 	})
 
 	ctx.Transactional(false, func(ctx *Context) error {
-		if n := ctx.TxStat(BucketName).Entries; n != 4 {
+		if n := ctx.BucketStat(BucketName).Entries; n != 4 {
 			t.Fatalf("assertion failed. expect 4, got %d", n)
 		}
 
@@ -122,7 +122,7 @@ func TestNestedTxn2(t *testing.T) {
 	})
 
 	ctx.Transactional(false, func(ctx *Context) error {
-		if n := ctx.TxStat(BucketName).Entries; n != 0 {
+		if n := ctx.BucketStat(BucketName).Entries; n != 0 {
 			t.Fatalf("assertion failed. expect 0, got %d", n)
 		}
 
