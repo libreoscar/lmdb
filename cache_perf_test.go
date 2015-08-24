@@ -16,6 +16,25 @@ type Maper interface {
 	Flush(ctx *Context)
 }
 
+//-------------------------- MemMapper ----------------------------------------------------
+
+type MemMapper map[string][]byte
+
+func (m MemMapper) Get(ctx *Context, key []byte) (val []byte, b bool) {
+	val, b = m[string(key)]
+	return
+}
+
+func (m MemMapper) Put(ctx *Context, key, value []byte) {
+	m[string(key)] = value
+}
+
+func (m MemMapper) Del(ctx *Context, key []byte) {
+	delete(m, string(key))
+}
+
+func (m MemMapper) Flush(ctx *Context) {}
+
 //-------------------------- ZeroCacheMapper -----------------------------------------------
 
 type ZeroCacheMapper struct{}
@@ -128,4 +147,8 @@ func BenchmarkCached(b *testing.B) {
 		deleted: make(map[string]bool),
 	}
 	benchmarkMapper(b, mapper)
+}
+
+func BenchmarkMemMapper(b *testing.B) {
+	benchmarkMapper(b, make(MemMapper))
 }
