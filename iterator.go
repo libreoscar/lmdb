@@ -1,6 +1,7 @@
 package lmdb
 
 import (
+	"bytes"
 	"github.com/szferi/gomdb"
 )
 
@@ -50,12 +51,31 @@ func (itr *Iterator) Next() bool {
 	return err == nil
 }
 
-func (itr *Iterator) Seek(k []byte) bool {
+// Position at the key that matches {k} exactly
+func (itr *Iterator) SeekExact(k []byte) bool {
+	key, _, err := (*mdb.Cursor)(itr).GetVal(k, nil, mdb.SET_RANGE)
+	if err != nil && err != mdb.NotFound {
+		panic(err)
+	}
+	return err == nil && bytes.Equal(key.BytesNoCopy(), k)
+}
+
+// Position at first key greater than or equal to specified key.
+func (itr *Iterator) SeekGE(k []byte) bool {
 	_, _, err := (*mdb.Cursor)(itr).GetVal(k, nil, mdb.SET_RANGE)
 	if err != nil && err != mdb.NotFound {
 		panic(err)
 	}
 	return err == nil
+}
+
+// Position at first key that has the specified prefix
+func (itr *Iterator) SeekByPrefix(prefix []byte) bool {
+	key, _, err := (*mdb.Cursor)(itr).GetVal(prefix, nil, mdb.SET_RANGE)
+	if err != nil && err != mdb.NotFound {
+		panic(err)
+	}
+	return err == nil && bytes.HasPrefix(key.BytesNoCopy(), prefix)
 }
 
 // Returns (key, value) pair.
