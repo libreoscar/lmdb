@@ -2,7 +2,7 @@ package lmdb
 
 import (
 	"bytes"
-	"github.com/szferi/gomdb"
+	mdb "github.com/szferi/gomdb"
 )
 
 // In a write txn, iterator will be closed automatically when the txn commits/aborts, but in a

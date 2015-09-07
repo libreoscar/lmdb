@@ -2,7 +2,7 @@ package lmdb
 
 import (
 	"errors"
-	"github.com/szferi/gomdb"
+	mdb "github.com/szferi/gomdb"
 )
 
 // Thread Safety
