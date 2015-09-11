@@ -56,7 +56,19 @@ func Open(path string, buckets []string) (Context, error) {
 }
 
 func Open2(path string, buckets []string, maxMapSize uint64) (ctx Context, err error) {
+	// TODO (Potential bug):
+	// From mdb_env_open's doc,
+	//  "If this function fails, #mdb_env_close() must be called to discard the #MDB_env handle."
+	// But mdb.NewEnv doesnot call mdb_env_close() when it fails, AND it just return nil as env.
+	// Patch gomdb if this turns out to be a big issue.
 	env, err := mdb.NewEnv()
+	defer func() {
+		if err != nil && env != nil {
+			env.Close()
+			ctx.env = nil
+		}
+	}()
+
 	if err != nil {
 		return
 	}
