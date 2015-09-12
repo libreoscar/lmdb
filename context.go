@@ -118,7 +118,7 @@ func Open2(path string, buckets []string, maxMapSize uint64) (ctx Context, err e
 	return
 }
 
-func (ctx *Context) Close() {
+func (ctx *Context) CloseDB() {
 	if ctx.txn != nil {
 		panic("Closing database inside a transaction")
 	}

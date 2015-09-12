@@ -54,7 +54,7 @@ func TestNestedTxn1(t *testing.T) {
 
 	bucketNames := []string{BucketName}
 	ctx, err := Open(path, bucketNames)
-	defer ctx.Close()
+	defer ctx.CloseDB()
 
 	if err != nil {
 		panic(err)
@@ -109,7 +109,7 @@ func TestNestedTxn2(t *testing.T) {
 
 	bucketNames := []string{BucketName}
 	ctx, err := Open(path, bucketNames)
-	defer ctx.Close()
+	defer ctx.CloseDB()
 
 	if err != nil {
 		panic(err)

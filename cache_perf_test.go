@@ -108,7 +108,7 @@ func benchmarkMapper(b *testing.B, mapper Maper) {
 	defer os.RemoveAll(path)
 
 	ctx, err := Open(path, []string{Bucket})
-	defer ctx.Close()
+	defer ctx.CloseDB()
 
 	if err != nil {
 		panic(err)
