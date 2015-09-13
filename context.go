@@ -143,6 +143,14 @@ func (ctx *Context) Info() *Info {
 	return (*Info)(info)
 }
 
+func (ctx *Context) TransactionalR(f func(ctx *Context) error) (err error) {
+	return ctx.Transactional(false, f);
+}
+
+func (ctx *Context) TransactionalRW(f func(ctx *Context) error) (err error) {
+	return ctx.Transactional(true, f);
+}
+
 func (ctx *Context) Transactional(write bool, f func(ctx *Context) error) (err error) {
 	var flag uint = 0
 	if !write {
@@ -152,6 +160,7 @@ func (ctx *Context) Transactional(write bool, f func(ctx *Context) error) (err e
 	if err != nil { // Possible Errors: MDB_PANIC, MDB_MAP_RESIZED, MDB_READERS_FULL, ENOMEM
 		panic(err)
 	}
+
 	var panicF interface{} // panic from f
 	newCtx := Context{ctx.env, ctx.buckets, txn, nil}
 
@@ -174,12 +183,11 @@ func (ctx *Context) Transactional(write bool, f func(ctx *Context) error) (err e
 		}
 	}()
 
-	err = func() (err error) {
+	func() {
 		defer func() {
 			panicF = recover()
 		}()
 		err = f(&newCtx)
-		return
 	}()
 
 	return
