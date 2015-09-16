@@ -10,48 +10,48 @@ import (
 const Bucket string = "Bucket"
 
 type Maper interface {
-	Get(ctx *Context, key []byte) ([]byte, bool)
-	Put(ctx *Context, key, value []byte)
-	Del(ctx *Context, key []byte)
-	Flush(ctx *Context)
+	Get(txn *ReadWriteTxn, key []byte) ([]byte, bool)
+	Put(txn *ReadWriteTxn, key, value []byte)
+	Del(txn *ReadWriteTxn, key []byte)
+	Flush(txn *ReadWriteTxn)
 }
 
 //-------------------------- MemMapper ----------------------------------------------------
 
 type MemMapper map[string][]byte
 
-func (m MemMapper) Get(ctx *Context, key []byte) (val []byte, b bool) {
+func (m MemMapper) Get(txn *ReadWriteTxn, key []byte) (val []byte, b bool) {
 	val, b = m[string(key)]
 	return
 }
 
-func (m MemMapper) Put(ctx *Context, key, value []byte) {
+func (m MemMapper) Put(txn *ReadWriteTxn, key, value []byte) {
 	m[string(key)] = value
 }
 
-func (m MemMapper) Del(ctx *Context, key []byte) {
+func (m MemMapper) Del(txn *ReadWriteTxn, key []byte) {
 	delete(m, string(key))
 }
 
-func (m MemMapper) Flush(ctx *Context) {}
+func (m MemMapper) Flush(txn *ReadWriteTxn) {}
 
 //-------------------------- ZeroCacheMapper -----------------------------------------------
 
 type ZeroCacheMapper struct{}
 
-func (m *ZeroCacheMapper) Get(ctx *Context, key []byte) ([]byte, bool) {
-	return ctx.GetNoCopy(Bucket, key)
+func (m *ZeroCacheMapper) Get(txn *ReadWriteTxn, key []byte) ([]byte, bool) {
+	return txn.GetNoCopy(Bucket, key)
 }
 
-func (m *ZeroCacheMapper) Put(ctx *Context, key, value []byte) {
-	ctx.Put(Bucket, key, value)
+func (m *ZeroCacheMapper) Put(txn *ReadWriteTxn, key, value []byte) {
+	txn.Put(Bucket, key, value)
 }
 
-func (m *ZeroCacheMapper) Del(ctx *Context, key []byte) {
-	ctx.Delete(Bucket, key)
+func (m *ZeroCacheMapper) Del(txn *ReadWriteTxn, key []byte) {
+	txn.Delete(Bucket, key)
 }
 
-func (m *ZeroCacheMapper) Flush(ctx *Context) {}
+func (m *ZeroCacheMapper) Flush(txn *ReadWriteTxn) {}
 
 //-------------------------- CachedMapper ---------------------------------------------------
 
@@ -61,7 +61,7 @@ type CachedMapper struct {
 	deleted map[string]bool
 }
 
-func (m *CachedMapper) Get(ctx *Context, key []byte) ([]byte, bool) {
+func (m *CachedMapper) Get(txn *ReadWriteTxn, key []byte) ([]byte, bool) {
 	strkey := string(key)
 
 	if m.deleted[strkey] {
@@ -72,11 +72,11 @@ func (m *CachedMapper) Get(ctx *Context, key []byte) ([]byte, bool) {
 	if b {
 		return v, true
 	} else {
-		return ctx.GetNoCopy(Bucket, key)
+		return txn.GetNoCopy(Bucket, key)
 	}
 }
 
-func (m *CachedMapper) Put(ctx *Context, key, value []byte) {
+func (m *CachedMapper) Put(txn *ReadWriteTxn, key, value []byte) {
 	strkey := string(key)
 
 	delete(m.deleted, strkey)
@@ -86,18 +86,18 @@ func (m *CachedMapper) Put(ctx *Context, key, value []byte) {
 	m.cache[strkey] = cp
 }
 
-func (m *CachedMapper) Del(ctx *Context, key []byte) {
+func (m *CachedMapper) Del(txn *ReadWriteTxn, key []byte) {
 	strkey := string(key)
 	delete(m.cache, strkey)
 	m.deleted[strkey] = true
 }
 
-func (m *CachedMapper) Flush(ctx *Context) {
+func (m *CachedMapper) Flush(txn *ReadWriteTxn) {
 	for k, v := range m.cache {
-		ctx.Put(Bucket, []byte(k), v)
+		txn.Put(Bucket, []byte(k), v)
 	}
 	for k, _ := range m.deleted {
-		ctx.Delete(Bucket, []byte(k))
+		txn.Delete(Bucket, []byte(k))
 	}
 }
 
@@ -107,15 +107,14 @@ func benchmarkMapper(b *testing.B, mapper Maper) {
 	path, _ := ioutil.TempDir("", "lmdb_test")
 	defer os.RemoveAll(path)
 
-	ctx, err := Open(path, []string{Bucket})
-	defer ctx.CloseDB()
-
+	db, err := Open(path, []string{Bucket})
+	defer db.Close()
 	if err != nil {
 		panic(err)
 	}
 
 	for i := 0; i < b.N; i++ {
-		ctx.Transactional(true, func(ctx *Context) error {
+		db.TransactionalRW(func(txn *ReadWriteTxn) error {
 			for n := 0; n < 10000; n++ {
 				// 4 read, 2 put, 1 delete
 				key := []byte(fmt.Sprintf("%d", n%100))
@@ -123,14 +122,14 @@ func benchmarkMapper(b *testing.B, mapper Maper) {
 
 				k := n % 7
 				if k < 4 { // get
-					mapper.Get(ctx, key)
+					mapper.Get(txn, key)
 				} else if k < 6 { // put
-					mapper.Put(ctx, key, value)
+					mapper.Put(txn, key, value)
 				} else { // delete
-					mapper.Del(ctx, key)
+					mapper.Del(txn, key)
 				}
 			}
-			mapper.Flush(ctx)
+			mapper.Flush(txn)
 			// commit all
 			return nil
 		})
