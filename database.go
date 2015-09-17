@@ -140,7 +140,7 @@ func (db *Database) Info() *Info {
 	return (*Info)(info)
 }
 
-func (db *Database) TransactionalR(f func(*ReadTxn)) {
+func (db *Database) TransactionalR(f func(ReadTxner)) {
 	txn, err := db.env.BeginTxn(nil, mdb.RDONLY)
 	if err != nil { // Possible Errors: MDB_PANIC, MDB_MAP_RESIZED, MDB_READERS_FULL, ENOMEM
 		panic(err)
