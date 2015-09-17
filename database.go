@@ -32,7 +32,7 @@ const (
 	MAP_SIZE_DEFAULT uint64 = 64 * 1024 * 1024 * 1024 * 1024 // 64TB
 )
 
-type TransactionalRWer interface {
+type RWTxnCreator interface {
 	TransactionalRW(func(*ReadWriteTxn) error) error
 }
 
