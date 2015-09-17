@@ -33,7 +33,7 @@ const (
 )
 
 type TransactionalRWer interface {
-    TransactionalRW(func(*ReadWriteTxn) error) error
+	TransactionalRW(func(*ReadWriteTxn) error) error
 }
 
 type Database struct {
@@ -176,7 +176,7 @@ func (db *Database) TransactionalRW(f func(*ReadWriteTxn) error) (err error) {
 	}
 
 	var panicF interface{} // panic from f
-	rwCtx := ReadWriteTxn{db.env, ReadTxn{db.buckets, txn, nil}}
+	rwCtx := ReadWriteTxn{db.env, &ReadTxn{db.buckets, txn, nil}}
 
 	defer func() {
 		for _, itr := range rwCtx.itrs {

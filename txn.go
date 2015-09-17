@@ -22,7 +22,7 @@ type ReadTxn struct {
 
 type ReadWriteTxn struct {
 	env *mdb.Env
-	ReadTxn
+	*ReadTxn
 }
 
 //--------------------------------- ReadTxn -------------------------------------------------------
@@ -99,7 +99,7 @@ func (parent *ReadWriteTxn) TransactionalRW(f func(*ReadWriteTxn) error) (err er
 	}
 
 	var panicF interface{} // panic from f
-	rwCtx := ReadWriteTxn{parent.env, ReadTxn{parent.buckets, txn, nil}}
+	rwCtx := ReadWriteTxn{parent.env, &ReadTxn{parent.buckets, txn, nil}}
 
 	defer func() {
 		for _, itr := range rwCtx.itrs {
