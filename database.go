@@ -66,7 +66,7 @@ func Open2(path string, buckets []string, maxMapSize uint64) (db *Database, err 
 	defer func() {
 		if err != nil && env != nil {
 			env.Close()
-			db.env = nil
+			db.env = nil // TODO: Bug - db could be nil
 		}
 	}()
 	if err != nil {
