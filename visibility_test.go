@@ -1,14 +1,18 @@
 package lmdb
 
 import (
-	"github.com/facebookgo/ensure"
 	"io/ioutil"
 	"os"
 	"testing"
+
+	"github.com/facebookgo/ensure"
 )
 
 func TestVisibility1(t *testing.T) {
-	path, _ := ioutil.TempDir("", "lmdb_test")
+	path, err := ioutil.TempDir("", "lmdb_test")
+	if err != nil {
+		panic(err)
+	}
 	defer os.RemoveAll(path)
 
 	bucketNames := []string{BucketName}

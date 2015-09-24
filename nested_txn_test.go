@@ -49,7 +49,10 @@ func SubTxns(txn *ReadWriteTxn, t *testing.T) {
 }
 
 func TestNestedTxn1(t *testing.T) {
-	path, _ := ioutil.TempDir("", "lmdb_test")
+	path, err := ioutil.TempDir("", "lmdb_test")
+	if err != nil {
+		panic(err)
+	}
 	defer os.RemoveAll(path)
 
 	bucketNames := []string{BucketName}
@@ -65,7 +68,7 @@ func TestNestedTxn1(t *testing.T) {
 		return nil
 	})
 
-	db.TransactionalR(func(txn *ReadTxn) {
+	db.TransactionalR(func(txn ReadTxner) {
 		if n := txn.BucketStat(BucketName).Entries; n != 4 {
 			t.Fatalf("assertion failed. expect 4, got %d", n)
 		}
@@ -102,7 +105,10 @@ func TestNestedTxn1(t *testing.T) {
 }
 
 func TestNestedTxn2(t *testing.T) {
-	path, _ := ioutil.TempDir("", "lmdb_test")
+	path, err := ioutil.TempDir("", "lmdb_test")
+	if err != nil {
+		panic(err)
+	}
 	defer os.RemoveAll(path)
 
 	bucketNames := []string{BucketName}
@@ -118,7 +124,7 @@ func TestNestedTxn2(t *testing.T) {
 		return errors.New("give me an error!")
 	})
 
-	db.TransactionalR(func(txn *ReadTxn) {
+	db.TransactionalR(func(txn ReadTxner) {
 		if n := txn.BucketStat(BucketName).Entries; n != 0 {
 			t.Fatalf("assertion failed. expect 0, got %d", n)
 		}

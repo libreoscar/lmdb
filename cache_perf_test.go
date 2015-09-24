@@ -104,7 +104,10 @@ func (m *CachedMapper) Flush(txn *ReadWriteTxn) {
 //-------------------------- Benchmark ---------------------------------------------------
 
 func benchmarkMapper(b *testing.B, mapper Maper) {
-	path, _ := ioutil.TempDir("", "lmdb_test")
+	path, err := ioutil.TempDir("", "lmdb_test")
+	if err != nil {
+		panic(err)
+	}
 	defer os.RemoveAll(path)
 
 	db, err := Open(path, []string{Bucket})

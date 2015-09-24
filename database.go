@@ -19,7 +19,7 @@ import (
 // 6) Iterator is not thread-safe, but it does not make sense to use it on any thread except the
 //    thread that currently owns its associated txn.
 //
-//-------------------------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------------
 //
 // Best practice:
 // 1) Use iterators only in the txn that they are created
@@ -36,6 +36,30 @@ type RWTxnCreator interface {
 	TransactionalRW(func(*ReadWriteTxn) error) error
 }
 
+type dryRunDummyError struct { }
+
+func (d dryRunDummyError) Error() string {
+	return "Dummy error of dry running a db transaction."
+}
+
+// Dry run the db transaction, i.e. always rollback, even if the returned error is nil.
+func DryRunRWTransaction(rwtxer RWTxnCreator, f func(*ReadWriteTxn) error) error {
+	err := rwtxer.TransactionalRW(func(rwtx *ReadWriteTxn) error {
+		err := f(rwtx)
+		if err == nil {
+			err = dryRunDummyError{}
+		}
+		return err
+	})
+
+	if _, ok := err.(dryRunDummyError); ok {
+		err = nil
+	}
+	return err
+}
+
+//--------------------------------- Database ---------------------------------------------
+
 type Database struct {
 	env *mdb.Env
 	// In this package, a DBI is obtained only through Open/Open2, and is never closed until
@@ -45,8 +69,6 @@ type Database struct {
 
 type Stat mdb.Stat
 type Info mdb.Info
-
-//--------------------------------- Database ------------------------------------------------------
 
 func Version() string {
 	return mdb.Version()
