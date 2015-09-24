@@ -91,7 +91,7 @@ func Open2(path string, buckets []string, maxMapSize uint64) (db *Database, err 
 			log.Printf("[ERROR] Open db failed. %v", err)
 			env.Close()
 			if db != nil {
-				db.env = nil // TODO: Bug - db could be nil
+				db.env = nil
 			}
 		}
 	}()
