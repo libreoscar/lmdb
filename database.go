@@ -3,6 +3,7 @@ package lmdb
 import (
 	"errors"
 	mdb "github.com/szferi/gomdb"
+	"log"
 )
 
 // Thread Safety
@@ -36,7 +37,7 @@ type RWTxnCreator interface {
 	TransactionalRW(func(*ReadWriteTxn) error) error
 }
 
-type dryRunDummyError struct { }
+type dryRunDummyError struct{}
 
 func (d dryRunDummyError) Error() string {
 	return "Dummy error of dry running a db transaction."
@@ -87,6 +88,7 @@ func Open2(path string, buckets []string, maxMapSize uint64) (db *Database, err 
 	env, err := mdb.NewEnv()
 	defer func() {
 		if err != nil && env != nil {
+			log.Printf("[ERROR] Open db failed. %v", err)
 			env.Close()
 			db.env = nil // TODO: Bug - db could be nil
 		}
