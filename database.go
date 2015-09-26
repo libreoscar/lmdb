@@ -30,7 +30,7 @@ import (
 const (
 	// There is no penalty for making this huge.
 	// If you are on a 32-bit system, use Open2 and specify a smaller map size.
-	MAP_SIZE_DEFAULT uint64 = 64 * 1024 * 1024 * 1024 * 1024 // 64TB
+	MAP_SIZE_DEFAULT uint64 = 1 * 1024 * 1024 * 1024 * 1024 // 1TB
 )
 
 type RWTxnCreator interface {
@@ -117,31 +117,35 @@ func Open2(path string, buckets []string, maxMapSize uint64) (db *Database, err 
 		return
 	}
 
-	bucketCache := make(map[string]mdb.DBI)
 	db = &Database{env, nil}
+	db.buckets = make(map[string]mdb.DBI)
 
 	err = db.TransactionalRW(func(txn *ReadWriteTxn) error {
-		for _, name := range buckets {
-			if name == "" {
-				return errors.New("Bucket name is empty")
-			}
-			dbi, err := txn.txn.DBIOpen(&name, mdb.CREATE)
-			if err != nil {
-				return err
-			} else {
-				bucketCache[name] = dbi
-			}
-		}
-		return nil
+		return db.OpenBuckets(txn, buckets)
 	})
 
-	if err != nil {
-		return
-	} else {
-		db.buckets = bucketCache
-	}
-
 	return
+}
+
+func (db *Database) OpenBuckets(txn *ReadWriteTxn, buckets []string) error {
+	for _, name := range buckets {
+		if name == "" {
+			return errors.New("Bucket name is empty")
+		}
+
+		_, exist := db.buckets[name]
+		if exist {
+			continue
+		}
+
+		dbi, err := txn.txn.DBIOpen(&name, mdb.CREATE)
+		if err != nil {
+			return err
+		} else {
+			db.buckets[name] = dbi
+		}
+	}
+	return nil
 }
 
 func (db *Database) Close() {
