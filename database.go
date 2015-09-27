@@ -31,6 +31,9 @@ const (
 	// There is no penalty for making this huge.
 	// If you are on a 32-bit system, use Open2 and specify a smaller map size.
 	MAP_SIZE_DEFAULT uint64 = 1 * 1024 * 1024 * 1024 * 1024 // 1TB
+
+	// http://www.openldap.org/lists/openldap-technical/201305/msg00176.html
+	MAX_DB_DEFAULT int = 32
 )
 
 type RWTxnCreator interface {
@@ -76,23 +79,26 @@ func Version() string {
 }
 
 func Open(path string, buckets []string) (*Database, error) {
-	return Open2(path, buckets, MAP_SIZE_DEFAULT)
+	return Open2(path, buckets, MAP_SIZE_DEFAULT, MAX_DB_DEFAULT)
 }
 
-func Open2(path string, buckets []string, maxMapSize uint64) (db *Database, err error) {
-	// TODO (Potential bug):
+func Open2(path string, buckets []string, maxMapSize uint64, maxDB int) (db *Database, err error) {
+	if maxDB < len(buckets) {
+		maxDB = len(buckets)
+	}
+
+	// TODO: (Potential bug):
 	// From mdb_env_open's doc,
 	//  "If this function fails, #mdb_env_close() must be called to discard the #MDB_env handle."
 	// But mdb.NewEnv doesnot call mdb_env_close() when it fails, AND it just return nil as env.
 	// Patch gomdb if this turns out to be a big issue.
 	env, err := mdb.NewEnv()
+	db = &Database{env, make(map[string]mdb.DBI)}
 	defer func() {
 		if err != nil && env != nil {
 			log.Printf("[ERROR] Open db failed. %v", err)
 			env.Close()
-			if db != nil {
-				db.env = nil
-			}
+			db.env = nil
 		}
 	}()
 	if err != nil {
@@ -104,8 +110,7 @@ func Open2(path string, buckets []string, maxMapSize uint64) (db *Database, err 
 		return
 	}
 
-	// http://www.openldap.org/lists/openldap-technical/201305/msg00176.html
-	err = env.SetMaxDBs((mdb.DBI)(len(buckets)))
+	err = env.SetMaxDBs(mdb.DBI(maxDB))
 	if err != nil {
 		return
 	}
@@ -117,35 +122,64 @@ func Open2(path string, buckets []string, maxMapSize uint64) (db *Database, err 
 		return
 	}
 
-	db = &Database{env, nil}
-	db.buckets = make(map[string]mdb.DBI)
-
-	err = db.TransactionalRW(func(txn *ReadWriteTxn) error {
-		return db.OpenBuckets(txn, buckets)
-	})
-
+	err = db.OpenBuckets(buckets)
 	return
 }
 
-func (db *Database) OpenBuckets(txn *ReadWriteTxn, buckets []string) error {
-	for _, name := range buckets {
-		if name == "" {
-			return errors.New("Bucket name is empty")
-		}
+// It's better to call this function before calling any TransactionalR/TransactionalRW
+func (db *Database) OpenBuckets(buckets []string) error {
+	return db.TransactionalRW(func(txn *ReadWriteTxn) error {
+		for _, name := range buckets {
+			if name == "" {
+				return errors.New("Bucket name is empty")
+			}
 
-		_, exist := db.buckets[name]
-		if exist {
-			continue
-		}
+			_, exist := db.buckets[name]
+			if exist {
+				continue
+			}
 
-		dbi, err := txn.txn.DBIOpen(&name, mdb.CREATE)
+			dbi, err := txn.txn.DBIOpen(&name, mdb.CREATE)
+			if err != nil {
+				return err
+			} else {
+				db.buckets[name] = dbi
+			}
+		}
+		return nil
+	})
+}
+
+// It's better to call this function before calling any TransactionalR/TransactionalRW
+func (db *Database) GetExistingBuckets() (buckets []string, err error) {
+	db.TransactionalRW(func(txn *ReadWriteTxn) error {
+		dbi, err := txn.txn.DBIOpen(nil, mdb.CREATE)
 		if err != nil {
 			return err
-		} else {
-			db.buckets[name] = dbi
 		}
-	}
-	return nil
+
+		cur, err := txn.txn.CursorOpen(dbi)
+		if err != nil {
+			return err
+		}
+
+		itr := (*Iterator)(cur)
+		defer itr.Close()
+		if !itr.SeekFirst() {
+			return nil
+		}
+
+		for {
+			key, _ := itr.GetNoCopy()
+			buckets = append(buckets, string(key))
+
+			if !itr.Next() {
+				break
+			}
+		}
+		return nil
+	})
+	return
 }
 
 func (db *Database) Close() {
