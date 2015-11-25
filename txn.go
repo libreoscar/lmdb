@@ -1,6 +1,7 @@
 package lmdb
 
 import (
+	"fmt"
 	mdb "github.com/szferi/gomdb"
 )
 
@@ -31,7 +32,7 @@ type ReadWriteTxn struct {
 func (txn *ReadTxn) getBucketId(bucket string) mdb.DBI {
 	id, b := txn.buckets[bucket]
 	if !b {
-		panic("bucket does not exist")
+		panic(fmt.Errorf("bucket does not exist: %s", bucket))
 	} else {
 		return id
 	}
