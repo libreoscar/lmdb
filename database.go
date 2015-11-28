@@ -2,7 +2,7 @@ package lmdb
 
 import (
 	"errors"
-	mdb "github.com/szferi/gomdb"
+	mdb "github.com/libreoscar/gomdb"
 	"log"
 )
 

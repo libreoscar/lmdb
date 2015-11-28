@@ -2,7 +2,7 @@ package lmdb
 
 import (
 	"fmt"
-	mdb "github.com/szferi/gomdb"
+	mdb "github.com/libreoscar/gomdb"
 )
 
 type ReadTxner interface {
