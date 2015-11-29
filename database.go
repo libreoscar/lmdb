@@ -122,12 +122,11 @@ func Open2(path string, buckets []string, maxMapSize uint64, maxDB int) (db *Dat
 		return
 	}
 
-	err = db.OpenBuckets(buckets)
+	err = db.openBuckets(buckets)
 	return
 }
 
-// It's better to call this function before calling any TransactionalR/TransactionalRW
-func (db *Database) OpenBuckets(buckets []string) error {
+func (db *Database) openBuckets(buckets []string) error {
 	return db.TransactionalRW(func(txn *ReadWriteTxn) error {
 		for _, name := range buckets {
 			if name == "" {
@@ -150,7 +149,6 @@ func (db *Database) OpenBuckets(buckets []string) error {
 	})
 }
 
-// It's better to call this function before calling any TransactionalR/TransactionalRW
 func (db *Database) GetExistingBuckets() (buckets []string, err error) {
 	db.TransactionalRW(func(txn *ReadWriteTxn) error {
 		dbi, err := txn.txn.DBIOpen(nil, mdb.CREATE)
