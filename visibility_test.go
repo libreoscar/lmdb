@@ -15,7 +15,7 @@ func TestVisibility1(t *testing.T) {
 	}
 	defer os.RemoveAll(path)
 
-	bucketNames := []string{BucketName}
+	bucketNames := []string{testBucket}
 	db, err := Open(path, bucketNames)
 	defer db.Close()
 	if err != nil {
@@ -23,13 +23,13 @@ func TestVisibility1(t *testing.T) {
 	}
 
 	db.TransactionalRW(func(txn *ReadWriteTxn) error {
-		if n := txn.BucketStat(BucketName).Entries; n != 0 {
+		if n := txn.BucketStat(testBucket).Entries; n != 0 {
 			t.Fatal("bucket not empty: ", n)
 		}
 
-		txn.Put(BucketName, []byte("txn0"), []byte("bar0"))
+		txn.Put(testBucket, []byte("txn0"), []byte("bar0"))
 		{
-			val, exist := txn.GetNoCopy(BucketName, []byte("txn0"))
+			val, exist := txn.GetNoCopy(testBucket, []byte("txn0"))
 			ensure.True(t, exist)
 			ensure.DeepEqual(t, val, []byte("bar0"))
 		}
@@ -37,14 +37,14 @@ func TestVisibility1(t *testing.T) {
 		// first tx
 		txn.TransactionalRW(func(txn *ReadWriteTxn) error {
 			{ // parent's change should be visiable to child
-				val, exist := txn.GetNoCopy(BucketName, []byte("txn0"))
+				val, exist := txn.GetNoCopy(testBucket, []byte("txn0"))
 				ensure.True(t, exist)
 				ensure.DeepEqual(t, val, []byte("bar0"))
 			}
 
-			txn.Put(BucketName, []byte("txn00"), []byte("bar00"))
+			txn.Put(testBucket, []byte("txn00"), []byte("bar00"))
 			{
-				val, exist := txn.GetNoCopy(BucketName, []byte("txn00"))
+				val, exist := txn.GetNoCopy(testBucket, []byte("txn00"))
 				ensure.True(t, exist)
 				ensure.DeepEqual(t, val, []byte("bar00"))
 			}
@@ -54,7 +54,7 @@ func TestVisibility1(t *testing.T) {
 		// second tx
 		txn.TransactionalRW(func(txn *ReadWriteTxn) error {
 			// first child's change should be visiable to the following child
-			val, exist := txn.GetNoCopy(BucketName, []byte("txn00"))
+			val, exist := txn.GetNoCopy(testBucket, []byte("txn00"))
 			ensure.True(t, exist)
 			ensure.DeepEqual(t, val, []byte("bar00"))
 			return nil

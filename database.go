@@ -231,14 +231,20 @@ func (db *Database) TransactionalR(f func(ReadTxner)) {
 	}()
 }
 
-func (db *Database) TransactionalRW(f func(*ReadWriteTxn) error) (err error) {
+func (db *Database) transactionalRWImpl(f func(*ReadWriteTxn) error, makingPatch bool) (
+  txPatch TxPatch, err error) {
+
 	txn, err := db.env.BeginTxn(nil, 0)
 	if err != nil { // Possible Errors: MDB_PANIC, MDB_MAP_RESIZED, MDB_READERS_FULL, ENOMEM
 		panic(err)
 	}
 
 	var panicF interface{} // panic from f
-	rwCtx := ReadWriteTxn{db.env, &ReadTxn{db.buckets, txn, nil}}
+	var dirtyKeys map[string]struct{}
+	if makingPatch {
+		dirtyKeys = make(map[string]struct{})
+	}
+	rwCtx := ReadWriteTxn{db.env, &ReadTxn{db.buckets, txn, nil}, dirtyKeys}
 
 	defer func() {
 		for _, itr := range rwCtx.itrs {
@@ -247,9 +253,19 @@ func (db *Database) TransactionalRW(f func(*ReadWriteTxn) error) (err error) {
 		rwCtx.itrs = nil
 
 		if err == nil && panicF == nil {
-			e := txn.Commit()
-			if e != nil { // Possible errors: EINVAL, ENOSPEC, EIO, ENOMEM
-				panic(e)
+			if !makingPatch {
+				e := txn.Commit()
+				if e != nil { // Possible errors: EINVAL, ENOSPEC, EIO, ENOMEM
+					panic(e)
+				}
+			} else {
+				for serializedCellkey := range rwCtx.dirtyKeys {
+					cellKey := DeserializeCellKey(serializedCellkey)
+					cell := cellState{bucket: cellKey.Bucket, key: cellKey.Key}
+					cell.value, cell.exists = rwCtx.Get(cellKey.Bucket, cellKey.Key)
+				  txPatch = append(txPatch, cell)
+				}
+				txn.Abort()
 			}
 		} else {
 			txn.Abort()
@@ -267,4 +283,26 @@ func (db *Database) TransactionalRW(f func(*ReadWriteTxn) error) (err error) {
 	}()
 
 	return
+}
+
+func (db *Database) TransactionalRW(f func(*ReadWriteTxn) error) error {
+	_, err := db.transactionalRWImpl(f, false)
+	return err
+}
+
+func (db *Database) MakeTxPatch(f func(*ReadWriteTxn) error) (TxPatch, error) {
+	return db.transactionalRWImpl(f, true)
+}
+
+func (db *Database) ApplyTxPatch(txPatch TxPatch) error {
+	return db.TransactionalRW(func(txn *ReadWriteTxn) error {
+		for _, cell := range txPatch {
+			if cell.exists {
+				txn.Put(cell.bucket, cell.key, cell.value)
+			} else {
+				txn.Delete(cell.bucket, cell.key)
+			}
+		}
+		return nil
+	})
 }

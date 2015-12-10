@@ -8,42 +8,42 @@ import (
 )
 
 const (
-	BucketName string = "Bucket0"
+	testBucket string = "Bucket0"
 )
 
 func SubTxns(txn *ReadWriteTxn, t *testing.T) {
-	if n := txn.BucketStat(BucketName).Entries; n != 0 {
+	if n := txn.BucketStat(testBucket).Entries; n != 0 {
 		t.Fatal("bucket not empty: ", n)
 	}
 
 	// first tx: success
 	txn.TransactionalRW(func(txn *ReadWriteTxn) error {
-		txn.Put(BucketName, []byte("txn00"), []byte("bar00"))
-		txn.Put(BucketName, []byte("txn01"), []byte("bar01"))
+		txn.Put(testBucket, []byte("txn00"), []byte("bar00"))
+		txn.Put(testBucket, []byte("txn01"), []byte("bar01"))
 		return nil
 	})
-	if n := txn.BucketStat(BucketName).Entries; n != 2 {
+	if n := txn.BucketStat(testBucket).Entries; n != 2 {
 		t.Fatalf("assertion failed. expect 2, got %d", n)
 	}
 
 	// second tx: fail
 	txn.TransactionalRW(func(txn *ReadWriteTxn) error {
-		txn.Put(BucketName, []byte("txn10"), []byte("bar10"))
-		txn.Put(BucketName, []byte("txn11"), []byte("bar11"))
+		txn.Put(testBucket, []byte("txn10"), []byte("bar10"))
+		txn.Put(testBucket, []byte("txn11"), []byte("bar11"))
 		return errors.New("whatever error")
 	})
-	if n := txn.BucketStat(BucketName).Entries; n != 2 {
+	if n := txn.BucketStat(testBucket).Entries; n != 2 {
 		t.Fatalf("assertion failed. expect 2, got %d", n)
 	}
 
 	// third tx: success
 	txn.TransactionalRW(func(txn *ReadWriteTxn) error {
-		txn.Put(BucketName, []byte("txn20"), []byte("bar20"))
-		txn.Put(BucketName, []byte("txn21"), []byte("bar21"))
-		txn.Put(BucketName, []byte("txn00"), []byte("bar99"))
+		txn.Put(testBucket, []byte("txn20"), []byte("bar20"))
+		txn.Put(testBucket, []byte("txn21"), []byte("bar21"))
+		txn.Put(testBucket, []byte("txn00"), []byte("bar99"))
 		return nil
 	})
-	if n := txn.BucketStat(BucketName).Entries; n != 4 {
+	if n := txn.BucketStat(testBucket).Entries; n != 4 {
 		t.Fatalf("assertion failed. expect 4, got %d", n)
 	}
 }
@@ -55,7 +55,7 @@ func TestNestedTxn1(t *testing.T) {
 	}
 	defer os.RemoveAll(path)
 
-	bucketNames := []string{BucketName}
+	bucketNames := []string{testBucket}
 	db, err := Open(path, bucketNames)
 	defer db.Close()
 	if err != nil {
@@ -69,7 +69,7 @@ func TestNestedTxn1(t *testing.T) {
 	})
 
 	db.TransactionalR(func(txn ReadTxner) {
-		if n := txn.BucketStat(BucketName).Entries; n != 4 {
+		if n := txn.BucketStat(testBucket).Entries; n != 4 {
 			t.Fatalf("assertion failed. expect 4, got %d", n)
 		}
 
@@ -85,7 +85,7 @@ func TestNestedTxn1(t *testing.T) {
 		}
 
 		for _, c := range cases1 {
-			v, b := txn.Get(BucketName, []byte(c.key))
+			v, b := txn.Get(testBucket, []byte(c.key))
 			if !b {
 				t.Fatalf("key not found: %s", c.key)
 			}
@@ -96,7 +96,7 @@ func TestNestedTxn1(t *testing.T) {
 
 		cases2 := []string{"txn10", "txn11", "txn99"}
 		for _, key := range cases2 {
-			_, b := txn.Get(BucketName, []byte(key))
+			_, b := txn.Get(testBucket, []byte(key))
 			if b {
 				t.Fatalf("unexpected key: %s", key)
 			}
@@ -111,7 +111,7 @@ func TestNestedTxn2(t *testing.T) {
 	}
 	defer os.RemoveAll(path)
 
-	bucketNames := []string{BucketName}
+	bucketNames := []string{testBucket}
 	db, err := Open(path, bucketNames)
 	defer db.Close()
 	if err != nil {
@@ -125,13 +125,13 @@ func TestNestedTxn2(t *testing.T) {
 	})
 
 	db.TransactionalR(func(txn ReadTxner) {
-		if n := txn.BucketStat(BucketName).Entries; n != 0 {
+		if n := txn.BucketStat(testBucket).Entries; n != 0 {
 			t.Fatalf("assertion failed. expect 0, got %d", n)
 		}
 
 		cases := []string{"txn00", "txn10", "txn11", "txn99"}
 		for _, key := range cases {
-			_, b := txn.Get(BucketName, []byte(key))
+			_, b := txn.Get(testBucket, []byte(key))
 			if b {
 				t.Fatalf("unexpected key: %s", key)
 			}

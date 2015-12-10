@@ -15,7 +15,7 @@ func TestThread(t *testing.T) {
 	}
 	defer os.RemoveAll(path)
 
-	bucketNames := []string{BucketName}
+	bucketNames := []string{testBucket}
 	db, err := Open(path, bucketNames)
 	defer db.Close()
 	if err != nil {
@@ -23,19 +23,19 @@ func TestThread(t *testing.T) {
 	}
 
 	db.TransactionalRW(func(txn *ReadWriteTxn) error {
-		txn.Put(BucketName, []byte("foo"), []byte("bar"))
+		txn.Put(testBucket, []byte("foo"), []byte("bar"))
 		return nil
 	})
 
 	db.TransactionalRW(func(txn *ReadWriteTxn) error {
-		txn.Put(BucketName, []byte("foo2"), []byte("bar2"))
+		txn.Put(testBucket, []byte("foo2"), []byte("bar2"))
 
 		db.TransactionalR(func(txnR ReadTxner) {
-			val, exist := txnR.Get(BucketName, []byte("foo"))
+			val, exist := txnR.Get(testBucket, []byte("foo"))
 			ensure.True(t, exist)
 			ensure.DeepEqual(t, val, []byte("bar"))
 
-			_, exist2 := txnR.Get(BucketName, []byte("foo2"))
+			_, exist2 := txnR.Get(testBucket, []byte("foo2"))
 			ensure.False(t, exist2)
 		})
 		return nil
@@ -49,7 +49,7 @@ func TestThread2(t *testing.T) {
 	}
 	defer os.RemoveAll(path)
 
-	bucketNames := []string{BucketName}
+	bucketNames := []string{testBucket}
 	db, err := Open(path, bucketNames)
 	defer db.Close()
 	if err != nil {
@@ -58,9 +58,9 @@ func TestThread2(t *testing.T) {
 
 	go db.TransactionalRW(func(txn *ReadWriteTxn) error {
 		t.Log("first RW txn begins")
-		txn.Put(BucketName, []byte("foo"), []byte("bar"))
+		txn.Put(testBucket, []byte("foo"), []byte("bar"))
 		time.Sleep(1 * time.Second)
-		_, exist := txn.Get(BucketName, []byte("foo1"))
+		_, exist := txn.Get(testBucket, []byte("foo1"))
 		ensure.False(t, exist)
 		t.Log("first RW txn ends")
 		return nil
@@ -69,7 +69,7 @@ func TestThread2(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	go db.TransactionalRW(func(txn *ReadWriteTxn) error {
 		t.Log("second RW txn begins")
-		txn.Put(BucketName, []byte("foo1"), []byte("bar1"))
+		txn.Put(testBucket, []byte("foo1"), []byte("bar1"))
 		t.Log("second RW txn ends")
 		return nil
 	})

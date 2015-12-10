@@ -1,6 +1,7 @@
 package lmdb
 
 import (
+	"errors"
 	"fmt"
 	mdb "github.com/libreoscar/gomdb"
 )
@@ -24,6 +25,7 @@ type ReadTxn struct {
 type ReadWriteTxn struct {
 	env *mdb.Env
 	*ReadTxn
+	dirtyKeys map[string]struct{} // the key is serilized CellKey
 }
 
 //--------------------------------- ReadTxn -------------------------------------------------------
@@ -100,7 +102,11 @@ func (parent *ReadWriteTxn) TransactionalRW(f func(*ReadWriteTxn) error) (err er
 	}
 
 	var panicF interface{} // panic from f
-	rwCtx := ReadWriteTxn{parent.env, &ReadTxn{parent.buckets, txn, nil}}
+	var subDirtyKeys map[string]struct{}
+	if parent.dirtyKeys != nil {
+		subDirtyKeys = make(map[string]struct{})
+	}
+	rwCtx := ReadWriteTxn{parent.env, &ReadTxn{parent.buckets, txn, nil}, subDirtyKeys}
 
 	defer func() {
 		for _, itr := range rwCtx.itrs {
@@ -112,6 +118,10 @@ func (parent *ReadWriteTxn) TransactionalRW(f func(*ReadWriteTxn) error) (err er
 			e := txn.Commit()
 			if e != nil { // Possible errors: EINVAL, ENOSPEC, EIO, ENOMEM
 				panic(e)
+			}
+
+			for dirtyKey := range rwCtx.dirtyKeys {
+				parent.dirtyKeys[dirtyKey] = struct{}{}
 			}
 		} else {
 			txn.Abort()
@@ -136,6 +146,10 @@ func (txn *ReadWriteTxn) ClearBucket(bucket string) {
 	if err != nil { // Possible errors: EINVAL, EACCES, MDB_BAD_DBI
 		panic(err)
 	}
+
+	if txn.dirtyKeys != nil {
+		panic(errors.New("Encountered ClearBucket operation when making TxPatch"))
+	}
 }
 
 func (txn *ReadWriteTxn) Put(bucket string, key, val []byte) {
@@ -143,11 +157,19 @@ func (txn *ReadWriteTxn) Put(bucket string, key, val []byte) {
 	if err != nil { // Possible errors: MDB_MAP_FULL, MDB_TXN_FULL, EACCES, EINVAL
 		panic(err)
 	}
+
+	if txn.dirtyKeys != nil {
+		txn.dirtyKeys[CellKey{bucket, key}.Serialize()] = struct{}{}
+	}
 }
 
 func (txn *ReadWriteTxn) Delete(bucket string, key []byte) {
 	err := txn.txn.Del(txn.getBucketId(bucket), key, nil)
 	if err != nil && err != mdb.NotFound { // Possible errors: EINVAL, EACCES, MDB_BAD_TXN
 		panic(err)
+	}
+
+	if txn.dirtyKeys != nil {
+		txn.dirtyKeys[CellKey{bucket, key}.Serialize()] = struct{}{}
 	}
 }
