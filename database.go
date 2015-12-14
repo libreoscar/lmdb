@@ -64,7 +64,7 @@ func DryRunRWTxn(rwtxner RWTxnCreator, f func(*ReadWriteTxn) error) error {
 }
 
 // a make-patch is a dry-run with a patch as its return value
-func MakePatch(rwtxner RWTxnCreator, f func(*ReadWriteTxn) error) (patch TxPatch, err error) {
+func MakePatch(rwtxner RWTxnCreator, f func(*ReadWriteTxn) error) (patch TxnPatch, err error) {
 	rwtxner.TransactionalRW(func(rwtxn *ReadWriteTxn) error {
 		origin := rwtxn.dirtyKeys
 		rwtxn.dirtyKeys = make(map[string]bool)

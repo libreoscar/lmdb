@@ -144,7 +144,7 @@ func (parent *ReadWriteTxn) TransactionalRW(f func(*ReadWriteTxn) error) (err er
 	return
 }
 
-func (txn *ReadWriteTxn) ApplyPatch(patch TxPatch) error {
+func (txn *ReadWriteTxn) ApplyPatch(patch TxnPatch) error {
 	for _, cell := range patch {
 		if cell.exists {
 			txn.Put(cell.bucket, cell.key, cell.value)
@@ -162,8 +162,8 @@ func (txn *ReadWriteTxn) ClearBucket(bucket string) {
 	}
 
 	if txn.dirtyKeys != nil {
-		// currently we do not support this operation when making a TxPatch
-		panic(errors.New("Encountered ClearBucket operation when making a TxPatch"))
+		// currently we do not support this operation when making a TxnPatch
+		panic(errors.New("Encountered ClearBucket operation when making a TxnPatch"))
 	}
 }
 

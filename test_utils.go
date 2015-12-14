@@ -4,7 +4,7 @@ import (
 	"reflect"
 )
 
-func MakePatchOfDb(db *Database) (rst TxPatch) {
+func MakePatchOfDb(db *Database) (rst TxnPatch) {
 	buckets, err := db.GetExistingBuckets()
 	if err != nil {
 		panic(err)
@@ -25,7 +25,7 @@ func MakePatchOfDb(db *Database) (rst TxPatch) {
 				}
 			}
 		}
-	});
+	})
 	return
 }
 

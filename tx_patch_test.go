@@ -63,7 +63,7 @@ func makeTestDb(namePrefix string, buckets []string) (string, *Database) {
 	return path, db
 }
 
-func TestTxPatch(tc *testing.T) {
+func TestTxnPatch(tc *testing.T) {
 	buckets := []string{"bk1, bk2"}
 
 	path1, dbTxn := makeTestDb("dbTxn", buckets)
@@ -89,7 +89,7 @@ func TestTxPatch(tc *testing.T) {
 	ensure.DeepEqual(tc, MakePatchOfDb(dbTxn), MakePatchOfDb(dbPatch))
 }
 
-func TestTxPatch_FailedTx(tc *testing.T) {
+func TestTxnPatch_FailedTx(tc *testing.T) {
 	buckets := []string{"bk1, bk2"}
 
 	path1, dbTxn := makeTestDb("dbTxn", buckets)

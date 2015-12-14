@@ -4,7 +4,7 @@ type cellState struct {
 	bucket string
 	key    []byte
 	exists bool
-	value []byte
+	value  []byte
 }
 
-type TxPatch []cellState
+type TxnPatch []cellState
