@@ -1,9 +1,9 @@
 package lmdb
 
 import (
-	"os"
 	"errors"
 	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/facebookgo/ensure"
@@ -12,10 +12,10 @@ import (
 func TestCellKey(tc *testing.T) {
 	cellKey := CellKey{"abce", []byte("987654321")}
 	serialized := cellKey.Serialize()
-	deserialized := DeserializeCellKey(serialized)
+	deserialized, err := DeserializeCellKey(serialized)
+	ensure.Nil(tc, err)
 	ensure.DeepEqual(tc, deserialized, cellKey)
 }
-
 
 func makeTestRWTX(buckets []string, failAtTheEnd bool) func(*ReadWriteTxn) error {
 	return func(txn *ReadWriteTxn) error {
@@ -50,26 +50,28 @@ func makeTestRWTX(buckets []string, failAtTheEnd bool) func(*ReadWriteTxn) error
 	}
 }
 
-func makeTestDb(namePrefix string, buckets []string) *Database {
+func makeTestDb(namePrefix string, buckets []string) (string, *Database) {
 	path, err := ioutil.TempDir("", namePrefix)
 	if err != nil {
 		panic(err)
 	}
-	defer os.RemoveAll(path)
 
 	db, err := Open(path, buckets)
 	if err != nil {
 		panic(err)
 	}
-	return db
+	return path, db
 }
 
 func TestTxPatch(tc *testing.T) {
 	buckets := []string{"bk1, bk2"}
 
-	dbTxn := makeTestDb("dbTxn", buckets)
+	path1, dbTxn := makeTestDb("dbTxn", buckets)
+	defer os.RemoveAll(path1)
 	defer dbTxn.Close()
-	dbPatch := makeTestDb("dbPatch", buckets)
+
+	path2, dbPatch := makeTestDb("dbPatch", buckets)
+	defer os.RemoveAll(path2)
 	defer dbPatch.Close()
 
 	tx := makeTestRWTX(buckets, false)
@@ -77,10 +79,12 @@ func TestTxPatch(tc *testing.T) {
 	err := dbTxn.TransactionalRW(tx)
 	ensure.Nil(tc, err)
 
-	dbPatch.MakeTxPatch(tx)
-	txPatch, err := dbPatch.MakeTxPatch(tx)
+	txPatch, err := MakePatch(dbPatch, tx)
 	ensure.Nil(tc, err)
-	dbPatch.ApplyTxPatch(txPatch)
+	dbPatch.TransactionalRW(func(rwtxn *ReadWriteTxn) error {
+		rwtxn.ApplyPatch(txPatch)
+		return nil
+	})
 
 	ensure.DeepEqual(tc, MakePatchOfDb(dbTxn), MakePatchOfDb(dbPatch))
 }
@@ -88,9 +92,12 @@ func TestTxPatch(tc *testing.T) {
 func TestTxPatch_FailedTx(tc *testing.T) {
 	buckets := []string{"bk1, bk2"}
 
-	dbTxn := makeTestDb("dbTxn", buckets)
+	path1, dbTxn := makeTestDb("dbTxn", buckets)
+	defer os.RemoveAll(path1)
 	defer dbTxn.Close()
-	dbPatch := makeTestDb("dbPatch", buckets)
+
+	path2, dbPatch := makeTestDb("dbPatch", buckets)
+	defer os.RemoveAll(path2)
 	defer dbPatch.Close()
 
 	tx := makeTestRWTX(buckets, true)
@@ -98,11 +105,13 @@ func TestTxPatch_FailedTx(tc *testing.T) {
 	err := dbTxn.TransactionalRW(tx)
 	ensure.NotNil(tc, err)
 
-	dbPatch.MakeTxPatch(tx)
-	txPatch, err := dbPatch.MakeTxPatch(tx)
+	txPatch, err := MakePatch(dbPatch, tx)
 	ensure.True(tc, len(txPatch) == 0)
 	ensure.NotNil(tc, err)
-	dbPatch.ApplyTxPatch(txPatch)
+	dbPatch.TransactionalRW(func(rwtxn *ReadWriteTxn) error {
+		rwtxn.ApplyPatch(txPatch)
+		return nil
+	})
 
 	ensure.DeepEqual(tc, MakePatchOfDb(dbTxn), MakePatchOfDb(dbPatch))
 }

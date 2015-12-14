@@ -25,7 +25,7 @@ type ReadTxn struct {
 type ReadWriteTxn struct {
 	env *mdb.Env
 	*ReadTxn
-	dirtyKeys map[string]struct{} // the key is serilized CellKey
+	dirtyKeys map[string]bool // the key is serilized CellKey
 }
 
 //--------------------------------- ReadTxn -------------------------------------------------------
@@ -102,9 +102,9 @@ func (parent *ReadWriteTxn) TransactionalRW(f func(*ReadWriteTxn) error) (err er
 	}
 
 	var panicF interface{} // panic from f
-	var subDirtyKeys map[string]struct{}
+	var subDirtyKeys map[string]bool
 	if parent.dirtyKeys != nil {
-		subDirtyKeys = make(map[string]struct{})
+		subDirtyKeys = make(map[string]bool)
 	}
 	rwCtx := ReadWriteTxn{parent.env, &ReadTxn{parent.buckets, txn, nil}, subDirtyKeys}
 
@@ -120,8 +120,11 @@ func (parent *ReadWriteTxn) TransactionalRW(f func(*ReadWriteTxn) error) (err er
 				panic(e)
 			}
 
+			if (parent.dirtyKeys == nil) != (rwCtx.dirtyKeys == nil) {
+				panic(fmt.Errorf("unexpected error"))
+			}
 			for dirtyKey := range rwCtx.dirtyKeys {
-				parent.dirtyKeys[dirtyKey] = struct{}{}
+				parent.dirtyKeys[dirtyKey] = true
 			}
 		} else {
 			txn.Abort()
@@ -141,6 +144,17 @@ func (parent *ReadWriteTxn) TransactionalRW(f func(*ReadWriteTxn) error) (err er
 	return
 }
 
+func (txn *ReadWriteTxn) ApplyPatch(patch TxPatch) error {
+	for _, cell := range patch {
+		if cell.exists {
+			txn.Put(cell.bucket, cell.key, cell.value)
+		} else {
+			txn.Delete(cell.bucket, cell.key)
+		}
+	}
+	return nil
+}
+
 func (txn *ReadWriteTxn) ClearBucket(bucket string) {
 	err := txn.txn.Drop(txn.getBucketId(bucket), 0)
 	if err != nil { // Possible errors: EINVAL, EACCES, MDB_BAD_DBI
@@ -148,7 +162,8 @@ func (txn *ReadWriteTxn) ClearBucket(bucket string) {
 	}
 
 	if txn.dirtyKeys != nil {
-		panic(errors.New("Encountered ClearBucket operation when making TxPatch"))
+		// currently we do not support this operation when making a TxPatch
+		panic(errors.New("Encountered ClearBucket operation when making a TxPatch"))
 	}
 }
 
@@ -159,7 +174,7 @@ func (txn *ReadWriteTxn) Put(bucket string, key, val []byte) {
 	}
 
 	if txn.dirtyKeys != nil {
-		txn.dirtyKeys[CellKey{bucket, key}.Serialize()] = struct{}{}
+		txn.dirtyKeys[CellKey{bucket, key}.Serialize()] = true
 	}
 }
 
@@ -170,6 +185,6 @@ func (txn *ReadWriteTxn) Delete(bucket string, key []byte) {
 	}
 
 	if txn.dirtyKeys != nil {
-		txn.dirtyKeys[CellKey{bucket, key}.Serialize()] = struct{}{}
+		txn.dirtyKeys[CellKey{bucket, key}.Serialize()] = true
 	}
 }

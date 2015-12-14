@@ -15,10 +15,7 @@ func (ck CellKey) Serialize() string {
 	return string(b)
 }
 
-func DeserializeCellKey(s string) (rst CellKey) {
-	err := json.Unmarshal([]byte(s), &rst)
-	if err != nil {
-		panic(err)
-	}
+func DeserializeCellKey(s string) (rst CellKey, err error) {
+	err = json.Unmarshal([]byte(s), &rst)
 	return
 }

@@ -26,7 +26,7 @@ func TestDryRunTx(t *testing.T) {
 		return nil
 	})
 
-	err = DryRunRWTransaction(db, func(rwtx *ReadWriteTxn) error {
+	err = DryRunRWTxn(db, func(rwtx *ReadWriteTxn) error {
 		rwtx.Delete("bucket", []byte("key1"))
 		rwtx.Put("bucket", []byte("key2"), []byte("value2"))
 		return nil

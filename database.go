@@ -2,6 +2,7 @@ package lmdb
 
 import (
 	"errors"
+	"fmt"
 	mdb "github.com/libreoscar/gomdb"
 	"log"
 )
@@ -47,8 +48,8 @@ func (d dryRunDummyError) Error() string {
 }
 
 // Dry run the db transaction, i.e. always rollback, even if the returned error is nil.
-func DryRunRWTransaction(rwtxer RWTxnCreator, f func(*ReadWriteTxn) error) error {
-	err := rwtxer.TransactionalRW(func(rwtx *ReadWriteTxn) error {
+func DryRunRWTxn(rwtxner RWTxnCreator, f func(*ReadWriteTxn) error) error {
+	err := rwtxner.TransactionalRW(func(rwtx *ReadWriteTxn) error {
 		err := f(rwtx)
 		if err == nil {
 			err = dryRunDummyError{}
@@ -60,6 +61,35 @@ func DryRunRWTransaction(rwtxer RWTxnCreator, f func(*ReadWriteTxn) error) error
 		err = nil
 	}
 	return err
+}
+
+// a make-patch is a dry-run with a patch as its return value
+func MakePatch(rwtxner RWTxnCreator, f func(*ReadWriteTxn) error) (patch TxPatch, err error) {
+	rwtxner.TransactionalRW(func(rwtxn *ReadWriteTxn) error {
+		origin := rwtxn.dirtyKeys
+		rwtxn.dirtyKeys = make(map[string]bool)
+		err = f(rwtxn)
+		if err == nil {
+			for serializedCellKey := range rwtxn.dirtyKeys {
+				cellKey, err2 := DeserializeCellKey(serializedCellKey)
+				if err2 != nil {
+					panic(fmt.Errorf("deserialization error: %s, serialized key = %v",
+						err2.Error(), serializedCellKey))
+				}
+				cell := cellState{bucket: cellKey.Bucket, key: cellKey.Key}
+				cell.value, cell.exists = rwtxn.Get(cellKey.Bucket, cellKey.Key)
+				patch = append(patch, cell)
+			}
+			err = dryRunDummyError{}
+		}
+		rwtxn.dirtyKeys = origin
+		return err
+	})
+
+	if _, ok := err.(dryRunDummyError); ok {
+		err = nil
+	}
+	return
 }
 
 //--------------------------------- Database ---------------------------------------------
@@ -231,20 +261,14 @@ func (db *Database) TransactionalR(f func(ReadTxner)) {
 	}()
 }
 
-func (db *Database) transactionalRWImpl(f func(*ReadWriteTxn) error, makingPatch bool) (
-  txPatch TxPatch, err error) {
-
+func (db *Database) TransactionalRW(f func(*ReadWriteTxn) error) (err error) {
 	txn, err := db.env.BeginTxn(nil, 0)
 	if err != nil { // Possible Errors: MDB_PANIC, MDB_MAP_RESIZED, MDB_READERS_FULL, ENOMEM
 		panic(err)
 	}
 
 	var panicF interface{} // panic from f
-	var dirtyKeys map[string]struct{}
-	if makingPatch {
-		dirtyKeys = make(map[string]struct{})
-	}
-	rwCtx := ReadWriteTxn{db.env, &ReadTxn{db.buckets, txn, nil}, dirtyKeys}
+	rwCtx := ReadWriteTxn{db.env, &ReadTxn{db.buckets, txn, nil}, nil}
 
 	defer func() {
 		for _, itr := range rwCtx.itrs {
@@ -253,19 +277,9 @@ func (db *Database) transactionalRWImpl(f func(*ReadWriteTxn) error, makingPatch
 		rwCtx.itrs = nil
 
 		if err == nil && panicF == nil {
-			if !makingPatch {
-				e := txn.Commit()
-				if e != nil { // Possible errors: EINVAL, ENOSPEC, EIO, ENOMEM
-					panic(e)
-				}
-			} else {
-				for serializedCellkey := range rwCtx.dirtyKeys {
-					cellKey := DeserializeCellKey(serializedCellkey)
-					cell := cellState{bucket: cellKey.Bucket, key: cellKey.Key}
-					cell.value, cell.exists = rwCtx.Get(cellKey.Bucket, cellKey.Key)
-				  txPatch = append(txPatch, cell)
-				}
-				txn.Abort()
+			e := txn.Commit()
+			if e != nil { // Possible errors: EINVAL, ENOSPEC, EIO, ENOMEM
+				panic(e)
 			}
 		} else {
 			txn.Abort()
@@ -283,26 +297,4 @@ func (db *Database) transactionalRWImpl(f func(*ReadWriteTxn) error, makingPatch
 	}()
 
 	return
-}
-
-func (db *Database) TransactionalRW(f func(*ReadWriteTxn) error) error {
-	_, err := db.transactionalRWImpl(f, false)
-	return err
-}
-
-func (db *Database) MakeTxPatch(f func(*ReadWriteTxn) error) (TxPatch, error) {
-	return db.transactionalRWImpl(f, true)
-}
-
-func (db *Database) ApplyTxPatch(txPatch TxPatch) error {
-	return db.TransactionalRW(func(txn *ReadWriteTxn) error {
-		for _, cell := range txPatch {
-			if cell.exists {
-				txn.Put(cell.bucket, cell.key, cell.value)
-			} else {
-				txn.Delete(cell.bucket, cell.key)
-			}
-		}
-		return nil
-	})
 }
