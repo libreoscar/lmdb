@@ -48,6 +48,11 @@ func (txn *ReadTxn) BucketStat(bucket string) *Stat {
 	return (*Stat)(stat)
 }
 
+// Panic if {bucket} does not exist.
+func (txn *ReadTxn) IsBucketEmpty(bucket string) bool {
+	return txn.Iterate(bucket) == nil
+}
+
 // Return {nil, false} if {key} does not exist, {val, true} if {key} exist
 func (txn *ReadTxn) Get(bucket string, key []byte) ([]byte, bool) {
 	v, err := txn.txn.GetVal(txn.getBucketId(bucket), key)

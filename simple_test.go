@@ -69,3 +69,40 @@ func TestGetExistingBuckets(t *testing.T) {
 		ensure.DeepEqual(t, buckets, []string{"bucket1", "bucket2", "bucket3"})
 	}()
 }
+
+func TestIsBucketEmpty(t *testing.T) {
+	path, err := ioutil.TempDir("", "lmdb_test")
+	if err != nil {
+		panic(err)
+	}
+	defer os.RemoveAll(path)
+
+	db, err := Open(path, []string{"bucket2", "bucket3", "bucket1"})
+	defer db.Close()
+	if err != nil {
+		panic(err)
+	}
+
+	db.TransactionalRW(func(txn *ReadWriteTxn) error {
+		ensure.True(t, txn.IsBucketEmpty("bucket1"))
+		ensure.True(t, txn.IsBucketEmpty("bucket2"))
+
+		txn.Put("bucket1", []byte("foo"), []byte("bar"))
+		ensure.False(t, txn.IsBucketEmpty("bucket1"))
+		ensure.True(t, txn.IsBucketEmpty("bucket2"))
+
+		txn.Delete("bucket1", []byte("foo"))
+		ensure.True(t, txn.IsBucketEmpty("bucket1"))
+		ensure.True(t, txn.IsBucketEmpty("bucket2"))
+
+		func() {
+			defer func() {
+        if r := recover(); r == nil {
+					t.Errorf("The code did not panic")
+        }
+			}()
+			txn.IsBucketEmpty("non-existing-bucket")
+		}()
+		return nil
+	})
+}
