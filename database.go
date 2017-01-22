@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	mdb "github.com/libreoscar/gomdb"
+	//"github.com/pingcap/tidb"
+	"github.com/pingcap/tidb/store/localstore/engine"
 	"log"
 )
 
@@ -90,6 +92,41 @@ func MakePatch(rwtxner RWTxnCreator, f func(*ReadWriteTxn) error) (patch TxnPatc
 		err = nil
 	}
 	return
+}
+
+// run with a patch as its return value
+// In MakePatch cell.exists == false  means deleted, here we reset this field and cell.exists==falsemeans the cell is jast created
+
+func MakeDePatch(rwtxner RWTxnCreator, f func(*ReadWriteTxn) error) (TxnPatch, error) {
+	pa, err := MakePatch(rwtxner, f)
+	//	fmt.Println(pa)
+	if err != nil {
+		return nil, err
+	}
+	rwtxner.TransactionalRW(func(rwtxn *ReadWriteTxn) error {
+		for i, j := range pa {
+			/*value = */
+			value, err := rwtxn.Get(j.bucket, j.key)
+			if err == false {
+				//this cell is just created
+				//fmt.Println(j)
+				pa[i].exists = false
+				// j.exists = false
+			} else {
+				pa[i].exists = true
+				j.value = value
+			}
+		}
+
+		return f(rwtxn)
+	})
+
+	return pa, err
+
+}
+
+func GetCellKey(x cellState) []byte {
+	return x.key
 }
 
 //--------------------------------- Database ---------------------------------------------
@@ -210,10 +247,11 @@ func (db *Database) GetExistingBuckets() (buckets []string, err error) {
 	return
 }
 
-func (db *Database) Close() {
+func (db *Database) Close() error {
 	if db.env != nil {
-		db.env.Close() // all opened dbis are closed during this process
+		return db.env.Close() // all opened dbis are closed during this process
 	}
+	return nil
 }
 
 func (db *Database) Stat() *Stat {
@@ -297,4 +335,143 @@ func (db *Database) TransactionalRW(f func(*ReadWriteTxn) error) (err error) {
 	}()
 
 	return
+}
+
+type MyDriver struct {
+}
+
+func (d MyDriver) Open(path string) (engine.DB, error) {
+	return (Open(path, []string{" "}))
+}
+
+func (db *Database) Get(key []byte) ([]byte, error) {
+	var res []byte
+	var err error = nil
+	db.TransactionalR(func(txn ReadTxner) {
+		res, _ = txn.Get(" ", key)
+	})
+	return res, err
+}
+
+func (db *Database) Seek(key []byte) ([]byte, []byte, error) {
+	var rkey, rval []byte
+	var rerr error
+	db.TransactionalR(func(txn ReadTxner) {
+		itr := txn.Iterate(" ")
+		if key == nil {
+			err := itr.SeekFirst()
+			if err == false {
+				rkey = nil
+				rval = nil
+				rerr = engine.ErrNotFound
+				return
+			}
+			rkey, rval = itr.Get()
+			rerr = nil
+			return
+		}
+		err := itr.SeekGE(key)
+		if err == false {
+			rkey = nil
+			rval = nil
+			rerr = engine.ErrNotFound
+			return
+		}
+		rkey, rval = itr.Get()
+		rerr = nil
+	})
+	return rkey, rval, rerr
+}
+
+func (db *Database) SeekReverse(key []byte) ([]byte, []byte, error) {
+	var rkey, rval []byte
+	var rerr error
+	db.TransactionalR(func(txn ReadTxner) {
+		itr := txn.Iterate(" ")
+		if key == nil {
+			err := itr.SeekLast()
+			if err == false {
+				rkey = nil
+				rval = nil
+				rerr = engine.ErrNotFound
+				return
+			}
+			rkey, rval = itr.Get()
+			rerr = nil
+			return
+		}
+
+		err := itr.SeekGE(key)
+		if err == false {
+			err1 := itr.SeekLast()
+			if err1 == false {
+				rkey = nil
+				rval = nil
+				rerr = engine.ErrNotFound
+				return
+			}
+			rkey, rval = itr.Get()
+			rerr = nil
+			return
+		} else {
+			err2 := itr.Prev()
+			if err2 == false {
+				rkey = nil
+				rval = nil
+				rerr = engine.ErrNotFound
+				return
+			}
+			rkey, rval = itr.Get()
+			rerr = nil
+			return
+		}
+	})
+	return rkey, rval, rerr
+
+}
+
+type Batch struct {
+	patch TxnPatch
+}
+
+func (b *Batch) Put(key []byte, value []byte) {
+	cell := cellState{bucket: " ", key: key, exists: true, value: value}
+	b.patch = append(b.patch, cell)
+	return
+}
+
+func (b *Batch) Delete(key []byte) {
+	cell := cellState{bucket: " ", key: key, exists: false}
+	b.patch = append(b.patch, cell)
+	return
+}
+
+func (b *Batch) Len() int {
+	return len(b.patch)
+}
+func (db *Database) NewBatch() engine.Batch {
+	return &Batch{}
+}
+
+func (db *Database) Commit(b engine.Batch) error {
+	db.TransactionalRW(func(txn *ReadWriteTxn) error {
+		pc, _ := b.(*Batch)
+		return txn.ApplyPatch(pc.patch)
+	})
+	return nil
+}
+
+func (db *Database) PrintAll() {
+	db.TransactionalR(func(txn ReadTxner) {
+		itr := txn.Iterate(" ")
+		for {
+			rkey, rval := itr.Get()
+			fmt.Println(rkey, rval)
+			err := itr.Next()
+			if err == false {
+				break
+			}
+		}
+
+	})
 }
